@@ -62,14 +62,15 @@ func (r *cloudlabExperimentResource) Create(ctx context.Context, req resource.Cr
 
 	// Create new experiment
 	// Run script
-	order, err := r.client.CreateOrder(items)
-	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error creating order",
-			"Could not create order, unexpected error: "+err.Error(),
-		)
-		return
-	}
+
+	//order, err := r.client.CreateOrder(items)
+	//if err != nil {
+	//	resp.Diagnostics.AddError(
+	//		"Error creating order",
+	//		"Could not create order, unexpected error: "+err.Error(),
+	//	)
+	//	return
+	//}
 
 	//// Map response body to schema and populate Computed attribute values
 	//plan.ID = types.StringValue(strconv.Itoa(order.ID))
