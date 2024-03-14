@@ -1,0 +1,19 @@
+version: '3'
+services:
+  ubuntu-container:
+    image: ubuntu:22.04
+    volumes:
+      - ./:/app
+    tty: true
+    command: tail -f /dev/null
+  web:
+    image: python:3.8
+    volumes:
+      - ./:/app
+    ports:
+      - "8080:8080"
+    working_dir: /app
+    command: bash -c "
+        pip install --upgrade pip &&
+        pip install flask && 
+        python server.py"
