@@ -168,5 +168,4 @@ func (p *cloudlabProvider) Resources(_ context.Context) []func() resource.Resour
 		CloudLabExperimentResource,
 		CloudLabVlanResource,
 	}
-	return nil
 }
