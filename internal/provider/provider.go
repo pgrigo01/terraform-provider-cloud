@@ -2,14 +2,15 @@ package provider
 
 import (
 	"context"
-	"os"
-
+	"fmt"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"os"
+	"strings"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -36,13 +37,14 @@ type cloudlabProvider struct {
 
 // Metadata returns the provider type name.
 func (p *cloudlabProvider) Metadata(_ context.Context, _ provider.MetadataRequest, resp *provider.MetadataResponse) {
-	resp.TypeName = "CloudLab"
+	resp.TypeName = "cloudLab"
 	resp.Version = p.version
 }
 
 // hashicupsProviderModel maps provider schema data to a Go type.
 type cloudlabProviderModel struct {
-	credentials_path types.String `tfsdk: "credentials_path"`
+	Credentials_path types.String `tfsdk:"credentials_path"`
+	Profile_config   types.Map    `tfsdk:"profile_config"`
 }
 
 // Schema defines the provider-level schema for configuration data.
@@ -52,6 +54,10 @@ func (p *cloudlabProvider) Schema(_ context.Context, _ provider.SchemaRequest, r
 			"credentials_path": schema.StringAttribute{
 				Required:  true,
 				Sensitive: true,
+			},
+			"profile_config": schema.MapAttribute{
+				Required:    true,
+				ElementType: types.StringType,
 			},
 		},
 	}
@@ -70,7 +76,40 @@ func (p *cloudlabProvider) Configure(ctx context.Context, req provider.Configure
 	// If practitioner provided a configuration value for any of the
 	// attributes, it must be a known value.
 
-	if config.credentials_path.IsUnknown() {
+	profile_aliases := config.Profile_config.Elements()
+	needed_profiles := []string{"multi_node"}
+	for _, prof := range needed_profiles {
+		if profile_aliases[prof] == nil {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("host"),
+				fmt.Sprintf("%s profile uuid not provided", prof),
+				fmt.Sprintf("Please provide the %s profile uuid in the provider configuration settings", prof),
+			)
+		}
+	}
+
+	for key := range profile_aliases {
+		key_in_needed_profiles := false
+		for _, s := range needed_profiles {
+			if s == key {
+				key_in_needed_profiles = true
+				break
+			}
+		}
+		if key_in_needed_profiles == false {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("host"),
+				fmt.Sprintf("%s is not a valid profile config", key),
+				"Please provide the correct profile uuid in the provider configuration settings."+
+					strings.Join(needed_profiles, ", "),
+			)
+		}
+	}
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	if config.Credentials_path.IsUnknown() {
 		resp.Diagnostics.AddAttributeError(
 			path.Root("host"),
 			"Unknown CloudLab credentials (.pem) file",
@@ -88,8 +127,8 @@ func (p *cloudlabProvider) Configure(ctx context.Context, req provider.Configure
 
 	credentials_path := os.Getenv("CLOUDLAB_CREDENTIALS_PATH")
 
-	if !config.credentials_path.IsNull() {
-		credentials_path = config.credentials_path.ValueString()
+	if !config.Credentials_path.IsNull() {
+		credentials_path = config.Credentials_path.ValueString()
 	}
 
 	// If any of the expected configurations are missing, return
@@ -109,10 +148,13 @@ func (p *cloudlabProvider) Configure(ctx context.Context, req provider.Configure
 		return
 	}
 
-	// Make the credentials path available during DataSource and Resource
+	// Make the client available during DataSource and Resource
 	// type Configure methods.
-	resp.DataSourceData = credentials_path
-	resp.ResourceData = credentials_path
+	client := Client{
+		credentialsPath: credentials_path,
+	}
+	resp.DataSourceData = client
+	resp.ResourceData = client
 }
 
 // DataSources defines the data sources implemented in the provider.
@@ -124,6 +166,7 @@ func (p *cloudlabProvider) DataSources(_ context.Context) []func() datasource.Da
 func (p *cloudlabProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		CloudLabExperimentResource,
+		CloudLabVlanResource,
 	}
 	return nil
 }

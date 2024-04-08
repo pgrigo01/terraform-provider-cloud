@@ -2,40 +2,49 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
 var (
-	_ resource.Resource = &cloudlabExperimentResource{}
+	_ resource.Resource = &cloudlabvmResource{}
 )
 
 // CloudLabExperimentResource is a helper function to simplify the provider implementation.
 func CloudLabExperimentResource() resource.Resource {
-	return &cloudlabExperimentResource{}
+	return &cloudlabvmResource{}
 }
 
-// cloudlabExperimentResource is the resource implementation.
-type cloudlabExperimentResource struct{}
+// cloudlabvmResource is the resource implementation.
+type cloudlabvmResource struct {
+	client Client
+}
 
 // Metadata returns the resource type name.
-func (r *cloudlabExperimentResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_cloudlab"
+func (r *cloudlabvmResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
+	resp.TypeName = "cloudlab_vm"
 }
 
 // orderResourceModel maps the resource schema data.
-type cloudlabExperimentModel struct {
-	project      types.String `tfsdk:"project"`
-	profile_uuid types.String `tfsdk:"profile_uuid"`
-	name         types.String `tfsdk:"name"`
+type cloudlabvmModel struct {
+	ID           types.String `tfsdk:"id"`
+	Project      types.String `tfsdk:"project"`
+	Profile_uuid types.String `tfsdk:"profile_uuid"`
+	Name         types.String `tfsdk:"name"`
+	Vlan         types.Int64  `tfsdk:"vlan"`
 }
 
 // Schema defines the schema for the resource.
-func (r *cloudlabExperimentResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
+func (r *cloudlabvmResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				Computed: true,
+			},
 			"project": schema.StringAttribute{
 				Required:  true,
 				Sensitive: true,
@@ -46,21 +55,45 @@ func (r *cloudlabExperimentResource) Schema(_ context.Context, _ resource.Schema
 			"name": schema.StringAttribute{
 				Required: true,
 			},
+			"vlan": &schema.ListAttribute{
+				ElementType: types.Int64Type,
+				Required:    true,
+			},
 		},
 	}
 }
 
+func (r *cloudlabvmResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+	// Prevent panic if the provider has not been configured.
+	if req.ProviderData == nil {
+		return
+	}
+
+	client, ok := req.ProviderData.(Client)
+
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Resource Configure Type",
+			fmt.Sprintf("Expected *provider.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+		)
+
+		return
+	}
+
+	r.client = client
+}
+
 // Create creates the resource and sets the initial Terraform state.
-func (r *cloudlabExperimentResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
+func (r *cloudlabvmResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	// Retrieve values from plan
-	var plan cloudlabExperimentModel
+	var plan cloudlabvmModel
 	diags := req.Plan.Get(ctx, &plan)
 	resp.Diagnostics.Append(diags...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	// Create new experiment
+	// Create new vm
 	// Run script
 
 	//order, err := r.client.CreateOrder(items)
@@ -89,6 +122,19 @@ func (r *cloudlabExperimentResource) Create(ctx context.Context, req resource.Cr
 	//}
 	//plan.LastUpdated = types.StringValue(time.Now().Format(time.RFC850))
 
+	_, err := r.client.startExperiment(map[string]string{
+		"key": "Value",
+	})
+
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Error creating order",
+			"Could not create vm, unexpected error: "+err.Error(),
+		)
+		return
+	}
+	tflog.Info(ctx, fmt.Sprintf("Hello World Vlan: %d", plan.Vlan))
+
 	// Set state to fully populated data
 	diags = resp.State.Set(ctx, plan)
 	resp.Diagnostics.Append(diags...)
@@ -98,13 +144,21 @@ func (r *cloudlabExperimentResource) Create(ctx context.Context, req resource.Cr
 }
 
 // Read refreshes the Terraform state with the latest data.
-func (r *cloudlabExperimentResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+func (r *cloudlabvmResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var state cloudlabvmModel
+	state.ID = types.StringValue("placeholder")
+	// Set state
+	diags := resp.State.Set(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
-func (r *cloudlabExperimentResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+func (r *cloudlabvmResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
-func (r *cloudlabExperimentResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
+func (r *cloudlabvmResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
 }
