@@ -96,7 +96,7 @@ func (p *cloudlabProvider) Configure(ctx context.Context, req provider.Configure
 				break
 			}
 		}
-		if key_in_needed_profiles == false {
+		if !key_in_needed_profiles {
 			resp.Diagnostics.AddAttributeError(
 				path.Root("host"),
 				fmt.Sprintf("%s is not a valid profile config", key),

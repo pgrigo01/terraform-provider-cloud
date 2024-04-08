@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"io/ioutil"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -72,7 +71,7 @@ func (c *Client) sendRequest(apiPath string, params map[string]string) (string, 
 		return "Error sending request", err
 	}
 	// Print body
-	body, err := ioutil.ReadAll(response.Body)
+	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		return "Error reading response body", err
 	}
