@@ -15,6 +15,7 @@ The [CloudLab Provider](https://registry.terraform.io/providers/hashicorp/aws/la
 
 ## Usage Example
 ```
+
 provider "cloudlab" {
   credentials_path = "./credentials-decrypted.pem"
 }
