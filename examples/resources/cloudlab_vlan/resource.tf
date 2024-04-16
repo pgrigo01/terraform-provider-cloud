@@ -1,4 +1,4 @@
 resource "cloudlab_vlan" "my-cloudlab-vlan" {
-  name        = "vm-name"
+  name        = "vlan-name"
   subnet_mask = "255.255.255.0"
 }
