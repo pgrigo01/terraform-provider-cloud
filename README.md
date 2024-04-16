@@ -15,5 +15,19 @@ The [CloudLab Provider](https://registry.terraform.io/providers/hashicorp/aws/la
 
 ## Usage Example
 ```
+provider "cloudlab" {
+  credentials_path = "./credentials-decrypted.pem"
+}
 
+resource "cloudlab_vlan" "my-cloudlab-vlan" {
+  name        = "vlan-name"
+  subnet_mask = "255.255.255.0"
+}
+
+resource "cloudlab_vm" "my-cloudlab-vm" {
+  name         = "vm-name"
+  project      = "project-name"
+  profile_uuid = "profile-uuid"
+  vlan         = []
+}
 ```
