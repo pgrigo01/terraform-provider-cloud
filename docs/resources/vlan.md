@@ -26,3 +26,7 @@ resource "cloudlab_vlan" "my-cloudlab-vlan" {
 
 - `name` (String)
 - `subnet_mask` (String)
+
+### Read-Only
+
+- `id` (String) The ID of this resource.
