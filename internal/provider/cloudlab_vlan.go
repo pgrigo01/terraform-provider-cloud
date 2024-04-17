@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -18,7 +19,9 @@ func CloudLabVlanResource() resource.Resource {
 }
 
 // cloudlabVlanResource is the resource implementation.
-type cloudlabVlanResource struct{}
+type cloudlabVlanResource struct {
+	client Client
+}
 
 // Metadata returns the resource type name.
 func (r *cloudlabVlanResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -47,6 +50,26 @@ func (r *cloudlabVlanResource) Schema(_ context.Context, _ resource.SchemaReques
 			},
 		},
 	}
+}
+
+func (r *cloudlabVlanResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
+	// Prevent panic if the provider has not been configured.
+	if req.ProviderData == nil {
+		return
+	}
+
+	client, ok := req.ProviderData.(Client)
+
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Resource Configure Type",
+			fmt.Sprintf("Expected *provider.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+		)
+
+		return
+	}
+
+	r.client = client
 }
 
 // Create creates the resource and sets the initial Terraform state.
