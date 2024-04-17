@@ -27,6 +27,7 @@ func (r *cloudlabVlanResource) Metadata(_ context.Context, req resource.Metadata
 
 // orderResourceModel maps the resource schema data.
 type cloudlabVlanModel struct {
+	ID          types.String `tfsdk:"id"`
 	Name        types.String `tfsdk:"name"`
 	Subnet_mask types.String `tfsdk:"subnet_mask"`
 }
@@ -35,6 +36,9 @@ type cloudlabVlanModel struct {
 func (r *cloudlabVlanResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				Computed: true,
+			},
 			"name": schema.StringAttribute{
 				Required: true,
 			},
@@ -65,6 +69,14 @@ func (r *cloudlabVlanResource) Create(ctx context.Context, req resource.CreateRe
 
 // Read refreshes the Terraform state with the latest data.
 func (r *cloudlabVlanResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	var state cloudlabVlanModel
+	state.ID = types.StringValue("placeholder")
+	// Set state
+	diags := resp.State.Set(ctx, &state)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 }
 
 // Update updates the resource and sets the updated Terraform state on success.
