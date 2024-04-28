@@ -141,7 +141,6 @@ def main():
         }
         (exitval,response) = api.startExperiment(rpc, params).apply();
         if exitval:
-            print(response.output)
             sys.exit(exitval);
             pass
         print("Experiment is starting up, checking status periodically")
@@ -179,7 +178,6 @@ def main():
 		# typically means we could not get to the cluster. But
 		# the experiment it marked for cancel, and eventually
 		# it is going to happen.
-		print(response.output)
                 sys.exit(code)
                 pass
             pass

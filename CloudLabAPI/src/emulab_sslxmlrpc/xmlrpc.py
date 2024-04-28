@@ -132,16 +132,11 @@ class EmulabXMLRPC:
             pass
 
         URI = "https://" + self.server + ":" + str(self.port) + self.path
-        print('Server:')
-        print(URI)
         ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
         try:
             ctx.set_ciphers("DEFAULT:@SECLEVEL=0")
         except:
             pass
-        print('Certificate')
-        print(self.certificate)
-        print(self.cacert)
         ctx.load_cert_chain(self.certificate)
         
         if not self.verify:
@@ -166,8 +161,6 @@ class EmulabXMLRPC:
 
 
         # Get a pointer to the function we want to invoke.
-        print('XMLRPC method:')
-        print(module + "." + method)
         meth      = getattr(self.server, module + "." + method)
         meth_args = [ PACKAGE_VERSION, params ]
 
@@ -176,17 +169,14 @@ class EmulabXMLRPC:
         #
         try:
             response = meth(*meth_args)
-            print(meth_args)
             pass
         except socket.error as e:
-            print(e)
             rval = -1;
             if e.args[0] == errno.ECONNREFUSED:
                 rval = RESPONSE_NETWORK_ERROR
                 pass
             return (rval, None)
         except Exception as e:
-            print(e)
             return (-1, None)
 
         #

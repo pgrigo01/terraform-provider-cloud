@@ -1,11 +1,5 @@
 version: '3'
 services:
-  ubuntu-container:
-    image: ubuntu:22.04
-    volumes:
-      - ./:/app
-    tty: true
-    command: tail -f /dev/null
   web:
     image: python:3.8
     volumes:
@@ -13,7 +7,9 @@ services:
     ports:
       - "8080:8080"
     working_dir: /app
+    environment:
+      - FLASK_ENV=production
     command: bash -c "
-        pip install --upgrade pip &&
-        pip install flask && 
-        python server.py"
+      pip install --upgrade pip &&
+      pip install flask gunicorn flask_sqlalchemy &&
+      gunicorn -b 0.0.0.0:8080 --timeout 120 server:app"

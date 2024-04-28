@@ -189,7 +189,6 @@ def main():
 
     try:
         if len(response.output):
-            print(response.output)
             pass
     except AttributeError as err:
         sys.exit(1)

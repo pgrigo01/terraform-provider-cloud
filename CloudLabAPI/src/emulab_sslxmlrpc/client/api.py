@@ -60,7 +60,6 @@ class startExperiment:
             )
             pass
         except getopt.error as e:
-            print(e.args[0])
             self.usage()
             return -1
 
@@ -163,7 +162,6 @@ class modifyExperiment:
             )
             pass
         except getopt.error as e:
-            print(e.args[0])
             self.usage()
             return -1
 
@@ -226,7 +224,6 @@ class terminateExperiment:
             opts, req_args = getopt.getopt(argv, "h", ["help"])
             pass
         except getopt.error as e:
-            print(e.args[0])
             self.usage()
             return -1
 
@@ -278,7 +275,6 @@ class extendExperiment:
             opts, req_args = getopt.getopt(argv, "hm:f:", ["help"])
             pass
         except getopt.error as e:
-            print(e.args[0])
             self.usage()
             return -1
 
