@@ -28,6 +28,11 @@ resource "cloudlab_vm" "my-cloudlab-vm" {
   name         = "vm-name"
   project      = "project-name"
   profile_uuid = "profile-uuid"
-  vlan         = []
+  vlan = [
+    {
+      name        = resource.cloudlab_vlan.my-cloudlab-vlan.name
+      subnet_mask = resource.cloudlab_vlan.my-cloudlab-vlan.subnet_mask
+    }
+  ]
 }
 ```

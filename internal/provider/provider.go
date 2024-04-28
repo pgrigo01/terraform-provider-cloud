@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"fmt"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
@@ -10,7 +9,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"os"
-	"strings"
 )
 
 // Ensure the implementation satisfies the expected interfaces.
@@ -44,7 +42,7 @@ func (p *cloudlabProvider) Metadata(_ context.Context, _ provider.MetadataReques
 // hashicupsProviderModel maps provider schema data to a Go type.
 type cloudlabProviderModel struct {
 	Credentials_path types.String `tfsdk:"credentials_path"`
-	Profile_config   types.Map    `tfsdk:"profile_config"`
+	Project          types.String `tfsdk:"project"`
 }
 
 // Schema defines the provider-level schema for configuration data.
@@ -55,9 +53,9 @@ func (p *cloudlabProvider) Schema(_ context.Context, _ provider.SchemaRequest, r
 				Required:  true,
 				Sensitive: true,
 			},
-			"profile_config": schema.MapAttribute{
-				Required:    true,
-				ElementType: types.StringType,
+			"project": schema.StringAttribute{
+				Required:  true,
+				Sensitive: true,
 			},
 		},
 	}
@@ -73,38 +71,15 @@ func (p *cloudlabProvider) Configure(ctx context.Context, req provider.Configure
 		return
 	}
 
-	// If practitioner provided a configuration value for any of the
-	// attributes, it must be a known value.
-
-	profile_aliases := config.Profile_config.Elements()
-	needed_profiles := []string{"multi_node"}
-	for _, prof := range needed_profiles {
-		if profile_aliases[prof] == nil {
-			resp.Diagnostics.AddAttributeError(
-				path.Root("host"),
-				fmt.Sprintf("%s profile uuid not provided", prof),
-				fmt.Sprintf("Please provide the %s profile uuid in the provider configuration settings", prof),
-			)
-		}
+	if config.Credentials_path.IsUnknown() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("host"),
+			"Unknown Project",
+			"The provider cannot communicate with CloudLab as there is an unknown configuration value for the CloudLab project. "+
+				"Either target apply the source of the value first, set the value statically in the configuration, or use the CLOUDLAB_PROJECT environment variable.",
+		)
 	}
 
-	for key := range profile_aliases {
-		key_in_needed_profiles := false
-		for _, s := range needed_profiles {
-			if s == key {
-				key_in_needed_profiles = true
-				break
-			}
-		}
-		if !key_in_needed_profiles {
-			resp.Diagnostics.AddAttributeError(
-				path.Root("host"),
-				fmt.Sprintf("%s is not a valid profile config", key),
-				"Please provide the correct profile uuid in the provider configuration settings."+
-					strings.Join(needed_profiles, ", "),
-			)
-		}
-	}
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -131,6 +106,15 @@ func (p *cloudlabProvider) Configure(ctx context.Context, req provider.Configure
 		credentials_path = config.Credentials_path.ValueString()
 	}
 
+	// Default values to environment variables, but override
+	// with Terraform configuration value if set.
+
+	project := os.Getenv("CLOUDLAB_PROJECT")
+
+	if !config.Project.IsNull() {
+		project = config.Project.ValueString()
+	}
+
 	// If any of the expected configurations are missing, return
 	// errors with provider-specific guidance.
 
@@ -144,6 +128,16 @@ func (p *cloudlabProvider) Configure(ctx context.Context, req provider.Configure
 		)
 	}
 
+	if project == "" {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("host"),
+			"Missing CloudLab project",
+			"The provider cannot communicate with CloudLab as there is a missing or empty value for the CloudLab project. "+
+				"Set the host value in the configuration or use the CLOUDLAB_PROJECT environment variable. "+
+				"If either is already set, ensure the value is not empty.",
+		)
+	}
+
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -152,6 +146,7 @@ func (p *cloudlabProvider) Configure(ctx context.Context, req provider.Configure
 	// type Configure methods.
 	client := Client{
 		credentialsPath: credentials_path,
+		project:         project,
 	}
 	resp.DataSourceData = client
 	resp.ResourceData = client
