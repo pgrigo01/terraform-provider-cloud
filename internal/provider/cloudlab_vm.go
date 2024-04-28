@@ -114,12 +114,12 @@ func (r *cloudlabvmResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	sharedvlans := fmt.Sprintf("%s", func() string {
+	sharedvlans := func() string {
 		var vlans []map[string]string
 		for _, vlan := range plan.Vlans {
 			vlans = append(vlans, map[string]string{
-				"name":        fmt.Sprintf("%s", strings.Replace(vlan.Name.String(), "\"", "", -1)),
-				"subnet_mask": fmt.Sprintf("%s", strings.Replace(vlan.Subnet_mask.String(), "\"", "", -1)),
+				"name":        strings.Replace(vlan.Name.String(), "\"", "", -1),
+				"subnet_mask": strings.Replace(vlan.Subnet_mask.String(), "\"", "", -1),
 			})
 		}
 		vlansJson, err := mapToJSON(vlans)
@@ -131,7 +131,7 @@ func (r *cloudlabvmResource) Create(ctx context.Context, req resource.CreateRequ
 			return ""
 		}
 		return vlansJson
-	}())
+	}()
 
 	tflog.Info(ctx, sharedvlans)
 
@@ -140,8 +140,8 @@ func (r *cloudlabvmResource) Create(ctx context.Context, req resource.CreateRequ
 	}
 
 	params := map[string]string{
-		"name":        fmt.Sprintf("%s", plan.Name),
-		"routable_ip": fmt.Sprintf("%s", plan.Routable_ip),
+		"name":        plan.Name.String(),
+		"routable_ip": plan.Routable_ip.String(),
 	}
 	AddImageParam(&params, plan.Image.String())
 	AddAggregateParam(&params, plan.Aggregate.String())
@@ -222,6 +222,19 @@ func (r *cloudlabvmResource) Read(ctx context.Context, req resource.ReadRequest,
 
 // Update updates the resource and sets the updated Terraform state on success.
 func (r *cloudlabvmResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var plan cloudlabvmModel
+	diags := req.Plan.Get(ctx, &plan)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	resp.Diagnostics.AddError(
+		"Error Updating VM",
+		"Could not update vm, error: NOT IMPLEMENTED",
+	)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 }
 
 // Delete deletes the resource and removes the Terraform state on success.
