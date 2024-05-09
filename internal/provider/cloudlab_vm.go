@@ -176,8 +176,6 @@ func (r *cloudlabvmResource) Create(ctx context.Context, req resource.CreateRequ
 	} else {
 		plan.Uuid = types.StringValue(response["UUID"])
 		tflog.Info(ctx, "Experiment exists with name: "+plan.Name.String())
-		//Set state
-		diags = resp.State.Set(ctx, &plan)
 	}
 
 	// Set state to fully populated data

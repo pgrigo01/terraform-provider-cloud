@@ -26,11 +26,23 @@ resource "cloudlab_vm" "my-cloudlab-vm" {
 
 ### Required
 
+- `aggregate` (String)
+- `image` (String)
 - `name` (String)
-- `profile_uuid` (String)
-- `project` (String, Sensitive)
-- `vlan` (List of Number)
+- `routable_ip` (Boolean)
+
+### Optional
+
+- `vlans` (Attributes List) (see [below for nested schema](#nestedatt--vlans))
 
 ### Read-Only
 
-- `id` (String) The ID of this resource.
+- `uuid` (String)
+
+<a id="nestedatt--vlans"></a>
+### Nested Schema for `vlans`
+
+Required:
+
+- `name` (String)
+- `subnet_mask` (String)

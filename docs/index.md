@@ -24,4 +24,4 @@ provider "cloudlab" {
 ### Required
 
 - `credentials_path` (String, Sensitive)
-- `profile_config` (Map of String)
+- `project` (String, Sensitive)
