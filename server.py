@@ -73,6 +73,20 @@ def parseArgs(request):
 
     return (temp_file_path, params), ("", 200)
 
+
+@app.before_request
+def log_request():
+    app.logger.info(f"Received {request.method} request to {request.url}")
+    app.logger.info(f"Headers: {request.headers}")
+    if request.is_json:
+        app.logger.info(f"JSON Payload: {request.get_json()}")
+    elif request.form:
+        app.logger.info(f"Form Data: {request.form}")
+    else:
+        app.logger.info(f"Raw Data: {request.data}")
+
+
+
 @app.route('/experiment', methods=['POST'])
 def startExperiment():
     app.logger.info("startExperiment")
