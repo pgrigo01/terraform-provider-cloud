@@ -86,25 +86,60 @@ def log_request():
         app.logger.info(f"Raw Data: {request.data}")
 
 
-
 @app.route('/experiment', methods=['POST'])
 def startExperiment():
     app.logger.info("startExperiment")
 
-    # Parse request arguments
+    # Parse Arguments
     app.logger.info('Parsing Arguments')
     args, err = parseArgs(request)
     errVal, errCode = err
     if errCode != 200:
-        return err
+        return {"error": errVal}, errCode
     file, params = args
 
-    if 'proj' not in params or 'profile' not in params or 'name' not in params:
-        return "Missing required parameters: proj, profile, and name.", 400
+    # Validate required parameters
+    required_params = ['proj', 'profile', 'name']
+    missing_params = [p for p in required_params if p not in params]
+    if missing_params:
+        return {"error": f"Missing required parameters: {', '.join(missing_params)}"}, 400
 
-    # Concatenate project and profile as required by CloudLab
-    project_profile = f"{params['proj']},{params['profile']}"
+        # Fix experiment and profile parameters
+    experiment_name = params['name'].strip('"')  # Ensure any surrounding quotes are removed
+    params['experiment'] = f"{params['proj']},{experiment_name}"
+    params['name'] = experiment_name  # Update the 'name' field as well
 
+    params['experiment'] = f"{params['proj']},{experiment_name}"
+    params['profile'] = params['profile'].strip()  # Ensure profile is clean
+
+    # Rebuild bindings if necessary
+    if 'bindings' in params:
+        try:
+            # Check if bindings is already a dictionary
+            if isinstance(params['bindings'], str):
+                bindings = json.loads(params['bindings'])  # Parse bindings JSON
+            elif isinstance(params['bindings'], dict):
+                bindings = params['bindings']  # Use it directly if it's already a dictionary
+            else:
+                raise TypeError("Bindings must be a JSON string or dictionary.")
+
+            # Update bindings with additional required fields
+            bindings.update({
+                "experiment": experiment_name,
+                "profile": params['profile'],
+                "proj": params['proj']
+            })
+
+            params['bindings'] = json.dumps(bindings)  # Convert back to JSON
+        except json.JSONDecodeError:
+            return {"error": "Invalid JSON in bindings."}, 400
+        except TypeError as e:
+            app.logger.error(f"Bindings error: {e}")
+            return {"error": str(e)}, 400
+
+    app.logger.info(f"Experiment parameters: {params}")
+
+    # CloudLab API configuration
     config = {
         "debug": 0,
         "impotent": 0,
@@ -114,68 +149,70 @@ def startExperiment():
     app.logger.info(f"Server configuration: {config}")
     server = xmlrpc.EmulabXMLRPC(config)
 
-    createdVlans = []
-    app.logger.info('Checking vlans')
+    # Check VLANs
+    created_vlans = []
+    if 'bindings' in params and isinstance(bindings := json.loads(params['bindings']), dict):
+        shared_vlans = bindings.get('sharedVlans', [])
+        for vlan in shared_vlans:
+            vlan_name = vlan.get('name')
+            if not vlan_name:
+                return {"error": "VLAN name is missing in bindings."}, 400
 
-    bindings = params.get('bindings', {})
-    sharedVlans = bindings.get('sharedVlans', []) if isinstance(bindings, dict) else []
+            db_vlan = Vlan.filter_by_name(vlan_name)
+            if db_vlan is None:
+                app.logger.info(f"Creating VLAN '{vlan_name}' for experiment '{experiment_name}'")
+                vlan['createSharedVlan'] = "true"
+                new_vlan = Vlan(vlan_name, experiment_name, False)
+                new_vlan.save()
+                created_vlans.append(new_vlan)
+            else:
+                app.logger.info(f"Using existing VLAN '{vlan_name}' for experiment '{experiment_name}'")
+                while not db_vlan.ready:
+                    app.logger.info(f"Waiting for VLAN '{vlan_name}' to become ready")
+                    db_vlan = db_vlan.update_from_cloudlab_and_db(app, server, params['proj'])
+                    if db_vlan and db_vlan.ready:
+                        vlan['connectSharedVlan'] = "true"
+                        app.logger.info(f"VLAN '{vlan_name}' is ready")
+                        break
+                    time.sleep(2)
+                if db_vlan:
+                    db_vlan.save()  # Save updated state
 
-    for vlan in sharedVlans:
-        vlan_name = vlan.get('name', None)
-        if not vlan_name:
-            return "VLAN name is missing in bindings.", 400
-
-        dbVlan = Vlan.filterByName(vlan_name)
-        if dbVlan is None:
-            app.logger.info(f"Experiment {params['name']} will create vlan {vlan_name}")
-            vlan['createSharedVlan'] = "true"
-            newDbVlan = Vlan(vlan_name, params['name'], False)
-            newDbVlan.save()
-            createdVlans.append(newDbVlan)
-        else:
-            app.logger.info(f"Experiment {params['name']} will use existing vlan {vlan_name}")
-            while not dbVlan.ready:
-                app.logger.info(f"Experiment {params['name']} waiting for {vlan_name} to be ready")
-                dbVlan = dbVlan.updateFromCloudlabAndDB(app, server, params['proj'])
-                if dbVlan is not None and dbVlan.ready:
-                    vlan['connectSharedVlan'] = "true"
-                    app.logger.info(f"VLAN {vlan_name} is ready")
-                else:
-                    break
-                time.sleep(2)
-            # Save reused VLAN to Firebase
-            if dbVlan:
-                dbVlan.save()
-
-    app.logger.info('Starting Experiment')
-    if 'bindings' in params:
-        params['bindings'] = json.dumps(params['bindings'])  # Convert bindings back to JSON
-    params['profile'] = project_profile  # Use the concatenated project and profile
-
-    app.logger.info(f"Experiment parameters: {params}")
-    (exitval, response) = api.startExperiment(server, params).apply()
+    # Start the experiment
+    app.logger.info("Starting Experiment")
+    exitval, response = api.startExperiment(server, params).apply()
     app.logger.info(f"ExitVal: {exitval}")
     app.logger.info(f"Response: {response}")
 
+    # Handle experiment creation results
     if exitval == 0:
-        # Save experiment metadata to Firebase on success
-        experiment_data = {
-            "name": params['name'],
-            "profile": params['profile'],
-            "project": params['proj'],
-            "vlans": [vlan.name for vlan in createdVlans]
-        }
-        experiment_ref = db.collection('experiment').document(params['name'])
-        experiment_ref.set(experiment_data)
+        # Save experiment metadata to Firebase
+        try:
+            experiment_data = {
+                "name": experiment_name,
+                "profile": params['profile'],
+                "project": params['proj'],
+                "vlans": [vlan.name for vlan in created_vlans],
+                "status": "running"
+            }
+            db.collection('experiment').document(experiment_name).set(experiment_data)
+            app.logger.info(f"Experiment '{experiment_name}' metadata saved to Firebase.")
+        except Exception as e:
+            app.logger.error(f"Failed to save experiment metadata to Firebase: {e}")
     else:
-        # Clean up created VLANs if the experiment fails
-        for vlan in createdVlans:
+        # Cleanup created VLANs if the experiment fails
+        for vlan in created_vlans:
             vlan.delete()
 
     if exitval in ERRORMESSAGES:
-        return ERRORMESSAGES[exitval]
+        return {"error": ERRORMESSAGES[exitval][0]}, ERRORMESSAGES[exitval][1]
 
-    return {"exitval": exitval, "response": response.output if exitval == 0 else "Experiment failed."}, 200 if exitval == 0 else 500
+    return {
+        "exitval": exitval,
+        "response": response.output if exitval == 0 else "Experiment failed."
+    }, 200 if exitval == 0 else 500
+ 
+
 
 @app.route('/experiment', methods=['GET'])
 def experimentStatus():
@@ -186,17 +223,18 @@ def experimentStatus():
     args, err = parseArgs(request)
     errVal, errCode = err
     if errCode != 200:
-        return err
+        return {"error": errVal}, errCode
     file, params = args
 
     # Validate required parameters
-    if 'proj' not in params or 'name' not in params:
-        return "Missing required parameters: proj and name.", 400
+    if 'proj' not in params or 'experiment' not in params:
+        return {"error": "Missing required parameters: proj or experiment."}, 400
 
-    # Format the project and experiment name as required by CloudLab
-    params['experiment'] = f"{params['proj']},{params['name']}"
+    # Fix experiment parameter
+    experiment_name = params['experiment'].strip('"')
+    params['experiment'] = f"{params['proj']},{experiment_name}"
 
-    # Server configuration for CloudLab
+    # CloudLab server configuration
     config = {
         "debug": 0,
         "impotent": 0,
@@ -207,12 +245,12 @@ def experimentStatus():
     server = xmlrpc.EmulabXMLRPC(config)
 
     app.logger.info(f"Fetching status for experiment: {params['experiment']}")
-    (exitval, response) = api.experimentStatus(server, params).apply()
+    exitval, response = api.experimentStatus(server, params).apply()
 
     app.logger.info(f"ExitVal: {exitval}")
     app.logger.info(f"Response: {response}")
 
-    # Check the response and return appropriate status
+    # Return response based on exitval
     if exitval == RESPONSE_SUCCESS:
         return {"status": "success", "data": response.output}, 200
     elif exitval in ERRORMESSAGES:
