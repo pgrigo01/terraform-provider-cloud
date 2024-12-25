@@ -6,8 +6,8 @@ from flask import Flask, request, jsonify, Request
 import CloudLabAPI.src.emulab_sslxmlrpc.client.api as api
 import CloudLabAPI.src.emulab_sslxmlrpc.xmlrpc as xmlrpc
 import tempfile
-
-from db import get_db_connection, Vlan
+from db import db  # Import Firestore client
+from db import Vlan
 
 app = Flask(__name__)
 app.logger.setLevel('DEBUG')  # Set the logging level as needed
@@ -108,20 +108,92 @@ def parseArgs(request: Request):
     return (temp_file_path, params), ("", 200)
 
 
+# @app.route('/experiment', methods=['POST'])
+# def startExperiment():
+#     app.logger.info("startExperiment")
+
+#     # Check if the 'file' key is in the request files
+#     app.logger.info('Parsing Arguments')
+#     args, err = parseArgs(request)
+#     errVal, errCode = err
+#     if errCode != 200:
+#         return err
+#     file, params = args
+#     if 'proj' not in list(params.keys()) or 'profile' not in list(params.keys()):
+#         return "Project and/or profile param not provided", 400
+
+#     config = {
+#         "debug": 0,
+#         "impotent": 0,
+#         "verify": 0,
+#         "certificate": file,
+#     }
+#     app.logger.info(f'Server configuration: {config}')
+#     server = xmlrpc.EmulabXMLRPC(config)
+
+#     createdVlans = []
+#     app.logger.info('Checking vlans')
+#     if 'sharedVlans' in params['bindings'].keys():
+#         sharedVlans = params['bindings']['sharedVlans']
+#         for vlan in sharedVlans:
+#             dbVlan = Vlan.filterByName(vlan['name'])
+#             if dbVlan is None:
+#                 app.logger.info(f'Experiment {params["name"]} will create vlan {vlan["name"]}')
+#                 vlan['createSharedVlan'] = "true"
+#                 newDbVlan = Vlan(vlan['name'], params['name'], False)
+#                 newDbVlan.save()
+#                 createdVlans.append(newDbVlan)
+#             else:
+#                 app.logger.info(f'Experiment {params["name"]} will use existing vlan {vlan["name"]}')
+#                 while not dbVlan.ready:
+#                     app.logger.info(f'Experiment {params["name"]} waiting for {vlan["name"]} to be ready')
+#                     dbVlan = dbVlan.updateFromCloudlabAndDB(app, server, params['proj'])
+#                     if dbVlan is not None:
+#                         if dbVlan.ready:
+#                             vlan['connectSharedVlan'] = "true"
+#                             app.logger.info(f'Vlan {vlan["name"]} is ready')
+#                     else:
+#                         break
+#                     time.sleep(2)
+#                 if dbVlan is None:
+#                     app.logger.info(f'Experiment {params["name"]} will create vlan {vlan["name"]}')
+#                     vlan['createSharedVlan'] = "true"
+#                     newDbVlan = Vlan(vlan['name'], params['name'], False)
+#                     newDbVlan.save()
+#                     createdVlans.append(newDbVlan)
+#     else:
+#         app.logger.info('No vlans')
+
+#     app.logger.info('Starting Experiment')
+#     params['bindings'] = dict_to_json(params['bindings'])
+#     app.logger.info(f'Experiment parameters: {params}')
+#     (exitval, response) = api.startExperiment(server, params).apply()
+#     app.logger.info(f'ExitVal: {exitval}')
+#     app.logger.info(f'Response: {response}')
+#     if exitval != 0:
+#         for vlan in createdVlans:
+#             vlan.delete()
+#     if exitval in ERRORMESSAGES.keys():
+#         return ERRORMESSAGES[exitval]
+#     return ERRORMESSAGES[RESPONSE_ERROR]
+    
 @app.route('/experiment', methods=['POST'])
 def startExperiment():
     app.logger.info("startExperiment")
 
-    # Check if the 'file' key is in the request files
+    # Parse request arguments
     app.logger.info('Parsing Arguments')
     args, err = parseArgs(request)
     errVal, errCode = err
     if errCode != 200:
         return err
     file, params = args
-    if 'proj' not in list(params.keys()) or 'profile' not in list(params.keys()):
+
+    # Ensure required fields are provided
+    if 'proj' not in params or 'profile' not in params:
         return "Project and/or profile param not provided", 400
 
+    # Emulab server configuration
     config = {
         "debug": 0,
         "impotent": 0,
@@ -132,8 +204,11 @@ def startExperiment():
     server = xmlrpc.EmulabXMLRPC(config)
 
     createdVlans = []
+    sharedVlans = []
+
+    # Handle VLANs if provided
     app.logger.info('Checking vlans')
-    if 'sharedVlans' in params['bindings'].keys():
+    if 'sharedVlans' in params['bindings']:
         sharedVlans = params['bindings']['sharedVlans']
         for vlan in sharedVlans:
             dbVlan = Vlan.filterByName(vlan['name'])
@@ -143,39 +218,41 @@ def startExperiment():
                 newDbVlan = Vlan(vlan['name'], params['name'], False)
                 newDbVlan.save()
                 createdVlans.append(newDbVlan)
-            else:
-                app.logger.info(f'Experiment {params["name"]} will use existing vlan {vlan["name"]}')
-                while not dbVlan.ready:
-                    app.logger.info(f'Experiment {params["name"]} waiting for {vlan["name"]} to be ready')
-                    dbVlan = dbVlan.updateFromCloudlabAndDB(app, server, params['proj'])
-                    if dbVlan is not None:
-                        if dbVlan.ready:
-                            vlan['connectSharedVlan'] = "true"
-                            app.logger.info(f'Vlan {vlan["name"]} is ready')
-                    else:
-                        break
-                    time.sleep(2)
-                if dbVlan is None:
-                    app.logger.info(f'Experiment {params["name"]} will create vlan {vlan["name"]}')
-                    vlan['createSharedVlan'] = "true"
-                    newDbVlan = Vlan(vlan['name'], params['name'], False)
-                    newDbVlan.save()
-                    createdVlans.append(newDbVlan)
-    else:
-        app.logger.info('No vlans')
 
+    # Start the experiment on Emulab
     app.logger.info('Starting Experiment')
     params['bindings'] = dict_to_json(params['bindings'])
     app.logger.info(f'Experiment parameters: {params}')
     (exitval, response) = api.startExperiment(server, params).apply()
     app.logger.info(f'ExitVal: {exitval}')
     app.logger.info(f'Response: {response}')
-    if exitval != 0:
+
+    # Save experiment metadata to Firestore if successful
+    if exitval == 0:
+        experiment_data = {
+            'name': params['name'],
+            'project': params['proj'],
+            'status': 'started',
+            'created_at': time.time()
+        }
+        db.collection('experiments').document(params['name']).set(experiment_data)
+        app.logger.info(f"Experiment '{params['name']}' saved to Firestore.")
+
+        # Save VLANs to Firestore
+        if not sharedVlans:
+            default_vlan = Vlan(params['name'], params['proj'], True)
+            default_vlan.save()
+        else:
+            for vlan in sharedVlans:
+                newDbVlan = Vlan(vlan['name'], params['name'], True)
+                newDbVlan.save()
+    else:
+        # Rollback VLANs if experiment fails
         for vlan in createdVlans:
             vlan.delete()
-    if exitval in ERRORMESSAGES.keys():
-        return ERRORMESSAGES[exitval]
-    return ERRORMESSAGES[RESPONSE_ERROR]
+            app.logger.info(f"Rolled back VLAN '{vlan['name']}' due to experiment failure.")
+
+    return ERRORMESSAGES.get(exitval, ERRORMESSAGES[RESPONSE_ERROR])
 
 
 @app.route('/experiment', methods=['GET'])
@@ -236,6 +313,31 @@ def terminateExperiment():
     app.logger.info(f'ExitVal: {exitval}')
     app.logger.info(f'Response: {response}')
     return ERRORMESSAGES[exitval]
+
+@app.route('/experiments', methods=['GET'])
+def listExperiments():
+    try:
+        filter_name = request.args.get('name')
+        filter_project = request.args.get('proj')
+        experiments_ref = db.collection('experiments')
+
+        query = experiments_ref
+        if filter_name:
+            query = query.where('name', '==', filter_name)
+        if filter_project:
+            query = query.where('project', '==', filter_project)
+
+        experiments = query.stream()
+        experiments_list = [
+            exp.to_dict() for exp in experiments
+        ]
+        return jsonify(experiments_list), 200
+
+    except Exception as e:
+        app.logger.error(f"Error listing experiments: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 
 
 if __name__ == '__main__':
