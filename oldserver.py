@@ -1,4 +1,5 @@
 import json
+import re
 import time
 from io import BytesIO
 
@@ -6,12 +7,16 @@ from flask import Flask, request, jsonify, Request
 import CloudLabAPI.src.emulab_sslxmlrpc.client.api as api
 import CloudLabAPI.src.emulab_sslxmlrpc.xmlrpc as xmlrpc
 import tempfile
-from db import db  # Import Firestore client
+
+from db import db  # Firestore client
 from db import Vlan
 
 app = Flask(__name__)
-app.logger.setLevel('DEBUG')  # Set the logging level as needed
+app.logger.setLevel('DEBUG')  # or INFO, as you prefer
 
+# --------------------------
+# Error / Status Constants
+# --------------------------
 RESPONSE_SUCCESS = 0
 RESPONSE_BADARGS = 1
 RESPONSE_ERROR = 2
@@ -19,7 +24,7 @@ RESPONSE_FORBIDDEN = 3
 RESPONSE_BADVERSION = 4
 RESPONSE_SERVERERROR = 5
 RESPONSE_TOOBIG = 6
-RESPONSE_REFUSED = 7  # Emulab is down, try again later.
+RESPONSE_REFUSED = 7
 RESPONSE_TIMEDOUT = 8
 RESPONSE_SEARCHFAILED = 12
 RESPONSE_ALREADYEXISTS = 17
@@ -39,87 +44,110 @@ ERRORMESSAGES = {
 }
 
 
+# -------------------------------------------------------------------
+# Helper: Check if a string is valid JSON
+# -------------------------------------------------------------------
 def is_valid_json(json_str):
     try:
-        jsonString = json.loads(json_str)
-        return jsonString
+        _ = json.loads(json_str)
+        return True
     except json.JSONDecodeError:
         return False
 
 
+# -------------------------------------------------------------------
+# Helper: Convert JSON string to dict
+# -------------------------------------------------------------------
 def json_to_dict(json_string):
-    """
-    Convert JSON string to dictionary.
-
-    Args:
-    json_string (str): JSON string to convert.
-
-    Returns:
-    dict: Dictionary converted from the JSON string.
-    """
     return json.loads(json_string)
 
 
+# -------------------------------------------------------------------
+# Helper: Convert dict to JSON string
+# -------------------------------------------------------------------
 def dict_to_json(dictionary):
-    """
-    Convert dictionary to JSON string.
-
-    Args:
-    dictionary (dict): Dictionary to convert.
-
-    Returns:
-    str: JSON string converted from the dictionary.
-    """
     return json.dumps(dictionary)
 
 
-def parseArgs(request: Request):
-    # parseFile
-    if 'file' not in request.files:
+# -------------------------------------------------------------------
+# parseArgs: Parse the form-data for file (certificate) + params
+# -------------------------------------------------------------------
+def parseArgs(req: Request):
+    """
+    Expects:
+      - file=@<path-to-cert> in req.files['file']
+      - Additional text fields in req.form (e.g. proj, profile, name, etc.)
+      - For "bindings", if present, expects JSON
+    """
+    if 'file' not in req.files:
         return (), ("No file provided", 400)
-    file = request.files['file']
 
-    # Check if a file was provided
+    file = req.files['file']
     if file.filename == '':
         return (), ("No file selected", 400)
 
-    # Read file content into BytesIO
+    # Save file content
     file_content = BytesIO()
     file.save(file_content)
 
-    # Save file content to a temporary file
     temp_file = tempfile.NamedTemporaryFile(delete=False)
     temp_file.write(file_content.getvalue())
     temp_file_path = temp_file.name
     temp_file.close()
 
     params = {}
-    for key, value in request.form.items():
+    for key, value in req.form.items():
         if key != 'bindings':
             params[key] = value.replace('"', '')
         else:
-            if is_valid_json(value) != False:
+            # Attempt to parse JSON in 'bindings'
+            if is_valid_json(value):
                 value_dict = json_to_dict(value)
-                if "sharedVlans" in value_dict.keys():
-                    value_dict["sharedVlans"] = json_to_dict(value_dict["sharedVlans"])
+                # If there's a nested JSON string for sharedVlans, parse that too
+                if "sharedVlans" in value_dict:
+                    if isinstance(value_dict["sharedVlans"], str):
+                        # Convert that JSON string to a dict
+                        value_dict["sharedVlans"] = json_to_dict(value_dict["sharedVlans"])
                 params[key] = value_dict
             else:
                 return (), ("Invalid bindings json", 400)
+
+    app.logger.debug(f"parseArgs -> file={temp_file_path}, params={params}")
     return (temp_file_path, params), ("", 200)
 
 
+# -------------------------------------------------------------------
+# Helper: Example function to parse UUID from any given string
+#         Adjust the regex or logic to match your CloudLab responses
+# -------------------------------------------------------------------
+def parse_uuid_from_response(response_string: str) -> str:
+    """
+    Tries to find a line like "UUID: d2a70fdc-c375-11ef-af1a-e4434b2381fc"
+    and returns the captured group. If none found, returns empty.
+    """
+    match = re.search(r"UUID:\s+([a-z0-9-]+)", response_string, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    return ""
+
+
+# -------------------------------------------------------------------
+# API: Start the experiment (POST /experiment)
+# - Creates doc in Firestore with 'uuid': 'unknown'
+# - Immediately calls experimentStatus to fetch real UUID
+# - Updates Firestore doc with the correct UUID
+# -------------------------------------------------------------------
 # @app.route('/experiment', methods=['POST'])
 # def startExperiment():
 #     app.logger.info("startExperiment")
 
-#     # Check if the 'file' key is in the request files
-#     app.logger.info('Parsing Arguments')
 #     args, err = parseArgs(request)
 #     errVal, errCode = err
 #     if errCode != 200:
 #         return err
 #     file, params = args
-#     if 'proj' not in list(params.keys()) or 'profile' not in list(params.keys()):
+
+#     if 'proj' not in params or 'profile' not in params:
 #         return "Project and/or profile param not provided", 400
 
 #     config = {
@@ -131,57 +159,34 @@ def parseArgs(request: Request):
 #     app.logger.info(f'Server configuration: {config}')
 #     server = xmlrpc.EmulabXMLRPC(config)
 
-#     createdVlans = []
-#     app.logger.info('Checking vlans')
-#     if 'sharedVlans' in params['bindings'].keys():
-#         sharedVlans = params['bindings']['sharedVlans']
-#         for vlan in sharedVlans:
-#             dbVlan = Vlan.filterByName(vlan['name'])
-#             if dbVlan is None:
-#                 app.logger.info(f'Experiment {params["name"]} will create vlan {vlan["name"]}')
-#                 vlan['createSharedVlan'] = "true"
-#                 newDbVlan = Vlan(vlan['name'], params['name'], False)
-#                 newDbVlan.save()
-#                 createdVlans.append(newDbVlan)
-#             else:
-#                 app.logger.info(f'Experiment {params["name"]} will use existing vlan {vlan["name"]}')
-#                 while not dbVlan.ready:
-#                     app.logger.info(f'Experiment {params["name"]} waiting for {vlan["name"]} to be ready')
-#                     dbVlan = dbVlan.updateFromCloudlabAndDB(app, server, params['proj'])
-#                     if dbVlan is not None:
-#                         if dbVlan.ready:
-#                             vlan['connectSharedVlan'] = "true"
-#                             app.logger.info(f'Vlan {vlan["name"]} is ready')
-#                     else:
-#                         break
-#                     time.sleep(2)
-#                 if dbVlan is None:
-#                     app.logger.info(f'Experiment {params["name"]} will create vlan {vlan["name"]}')
-#                     vlan['createSharedVlan'] = "true"
-#                     newDbVlan = Vlan(vlan['name'], params['name'], False)
-#                     newDbVlan.save()
-#                     createdVlans.append(newDbVlan)
-#     else:
-#         app.logger.info('No vlans')
-
+#     # Start experiment on Emulab
 #     app.logger.info('Starting Experiment')
-#     params['bindings'] = dict_to_json(params['bindings'])
-#     app.logger.info(f'Experiment parameters: {params}')
+#     if 'bindings' in params and isinstance(params['bindings'], dict):
+#         params['bindings'] = dict_to_json(params['bindings'])
+
 #     (exitval, response) = api.startExperiment(server, params).apply()
 #     app.logger.info(f'ExitVal: {exitval}')
 #     app.logger.info(f'Response: {response}')
-#     if exitval != 0:
-#         for vlan in createdVlans:
-#             vlan.delete()
-#     if exitval in ERRORMESSAGES.keys():
-#         return ERRORMESSAGES[exitval]
-#     return ERRORMESSAGES[RESPONSE_ERROR]
-    
+
+#     if exitval == 0:
+#         experiment_data = {
+#             'name': params['name'],
+#             'project': params['proj'],
+#             'status': 'started',
+#             'created_at': time.time()
+#         }
+#         db.collection('experiments').document(params['name']).set(experiment_data)
+#         app.logger.info(f"Experiment '{params['name']}' saved to Firestore.")
+#     else:
+#         app.logger.info("Experiment creation failed. No VLAN rollback necessary since VLAN logic removed.")
+
+#     return ERRORMESSAGES.get(exitval, ERRORMESSAGES[RESPONSE_ERROR])
+
 @app.route('/experiment', methods=['POST'])
 def startExperiment():
     app.logger.info("startExperiment")
 
-    # Parse request arguments
+    # 1. Parse request arguments
     app.logger.info('Parsing Arguments')
     args, err = parseArgs(request)
     errVal, errCode = err
@@ -189,11 +194,11 @@ def startExperiment():
         return err
     file, params = args
 
-    # Ensure required fields are provided
+    # Ensure required fields
     if 'proj' not in params or 'profile' not in params:
         return "Project and/or profile param not provided", 400
 
-    # Emulab server configuration
+    # 2. Configure Emulab server
     config = {
         "debug": 0,
         "impotent": 0,
@@ -203,72 +208,83 @@ def startExperiment():
     app.logger.info(f'Server configuration: {config}')
     server = xmlrpc.EmulabXMLRPC(config)
 
-    createdVlans = []
-    sharedVlans = []
-
-    # Handle VLANs if provided
-    app.logger.info('Checking vlans')
-    if 'sharedVlans' in params['bindings']:
-        sharedVlans = params['bindings']['sharedVlans']
-        for vlan in sharedVlans:
-            dbVlan = Vlan.filterByName(vlan['name'])
-            if dbVlan is None:
-                app.logger.info(f'Experiment {params["name"]} will create vlan {vlan["name"]}')
-                vlan['createSharedVlan'] = "true"
-                newDbVlan = Vlan(vlan['name'], params['name'], False)
-                newDbVlan.save()
-                createdVlans.append(newDbVlan)
-
-    # Start the experiment on Emulab
+    # 3. Start the experiment on Emulab
     app.logger.info('Starting Experiment')
-    params['bindings'] = dict_to_json(params['bindings'])
+    if 'bindings' in params and isinstance(params['bindings'], dict):
+        # Convert the 'bindings' dict to a JSON string if needed
+        params['bindings'] = dict_to_json(params['bindings'])
+
     app.logger.info(f'Experiment parameters: {params}')
     (exitval, response) = api.startExperiment(server, params).apply()
     app.logger.info(f'ExitVal: {exitval}')
     app.logger.info(f'Response: {response}')
 
-    # Save experiment metadata to Firestore if successful
     if exitval == 0:
+        # 4a. Try to parse the UUID from the startExperiment response
+        cloudlab_uuid = parse_uuid_from_response(str(response))
+        app.logger.info(f"Parsed UUID from startExperiment: '{cloudlab_uuid}'")
+
+        # 4b. If that fails, call experimentStatus to get the correct UUID
+        if not cloudlab_uuid:
+            app.logger.info("Could not parse UUID from startExperiment. Checking experimentStatus for the real UUID...")
+            status_params = {
+                'proj': params['proj'],
+                # Many CloudLab setups expect 'experiment': "proj,experimentName"
+                'experiment': f"{params['proj']},{params['name']}"
+            }
+            (status_exitval, status_response) = api.experimentStatus(server, status_params).apply()
+            app.logger.info(f"experimentStatus exitval={status_exitval}, response={status_response}")
+            if status_exitval == 0:
+                cloudlab_uuid = parse_uuid_from_response(str(status_response))
+                app.logger.info(f"Parsed UUID from experimentStatus: '{cloudlab_uuid}'")
+            else:
+                app.logger.warning("experimentStatus call failed. Storing 'unknown' for UUID.")
+                cloudlab_uuid = "unknown"
+
+        # 4c. If still not found, store 'unknown'
+        if not cloudlab_uuid:
+            cloudlab_uuid = "unknown"
+
+        # 5. Save experiment metadata to Firestore (no VLAN collection used)
         experiment_data = {
-            'name': params['name'],
+            'name': params['name'],      # friendly name
+            'uuid': cloudlab_uuid,       # actual CloudLab UUID
             'project': params['proj'],
             'status': 'started',
             'created_at': time.time()
         }
         db.collection('experiments').document(params['name']).set(experiment_data)
-        app.logger.info(f"Experiment '{params['name']}' saved to Firestore.")
+        app.logger.info(f"Experiment '{params['name']}' (uuid='{cloudlab_uuid}') saved to Firestore.")
 
-        # Save VLANs to Firestore
-        if not sharedVlans:
-            default_vlan = Vlan(params['name'], params['proj'], True)
-            default_vlan.save()
-        else:
-            for vlan in sharedVlans:
-                newDbVlan = Vlan(vlan['name'], params['name'], True)
-                newDbVlan.save()
     else:
-        # Rollback VLANs if experiment fails
-        for vlan in createdVlans:
-            vlan.delete()
-            app.logger.info(f"Rolled back VLAN '{vlan['name']}' due to experiment failure.")
+        # If experiment fails, we do not do VLAN rollback anymore (no VLANs used).
+        app.logger.info("Experiment creation failed on CloudLab. No VLAN collection to rollback.")
 
+    # 6. Return final result
     return ERRORMESSAGES.get(exitval, ERRORMESSAGES[RESPONSE_ERROR])
 
 
+
+# -------------------------------------------------------------------
+# API: experimentStatus (GET /experiment)
+# - Provided here for completeness. Adjust as needed.
+# -------------------------------------------------------------------
 @app.route('/experiment', methods=['GET'])
 def experimentStatus():
     app.logger.info("experimentStatus")
-
-    # Check if the 'file' key is in the request files
-    app.logger.info('Parsing Arguments')
     args, err = parseArgs(request)
     errVal, errCode = err
     if errCode != 200:
         return err
     file, params = args
-    if 'proj' not in list(params.keys()) or 'experiment' not in list(params.keys()):
+
+    if 'proj' not in params or 'experiment' not in params:
         return "Project and/or experiment param not provided", 400
+
+    # Possibly CloudLab expects experiment param as "proj,experimentName"
+    # or as a direct name. Adjust as needed:
     params['experiment'] = f"{params['proj']},{params['experiment']}"
+
     config = {
         "debug": 0,
         "impotent": 0,
@@ -278,26 +294,29 @@ def experimentStatus():
     app.logger.info(f'Server configuration: {config}')
     server = xmlrpc.EmulabXMLRPC(config)
 
-    dbVlan = Vlan.filterByExperiment(params['experiment'])
-    if dbVlan is not None:
-        dbVlan.updateFromCloudlabAndDB(app, server, params['proj'])
-    app.logger.info(f'Experiment parameters: {params}')
     (exitval, response) = api.experimentStatus(server, params).apply()
     app.logger.info(f'ExitVal: {exitval}')
     app.logger.info(f'Response: {response}')
-    return (response.output, ERRORMESSAGES[exitval][1])
+
+    # Return the raw output or some JSON, as you prefer
+    return (str(response.output), ERRORMESSAGES[exitval][1]) 
 
 
+# -------------------------------------------------------------------
+# Example: Terminate Experiment (DELETE /experiment)
+# - Looks up doc(s) by UUID if Terraform sends "experiment=<theUUID>"
+# - Provided for completeness, so you see how the UUID is used.
+# -------------------------------------------------------------------
 @app.route('/experiment', methods=['DELETE'])
 def terminateExperiment():
     app.logger.info("terminateExperiment")
-
-    # Check if the 'file' key is in the request files
     args, err = parseArgs(request)
     errVal, errCode = err
     if errCode != 200:
         return err
     file, params = args
+
+    app.logger.info(f"Received params for termination: {params}")
 
     config = {
         "debug": 0,
@@ -308,12 +327,34 @@ def terminateExperiment():
     app.logger.info(f'Server configuration: {config}')
     server = xmlrpc.EmulabXMLRPC(config)
 
-    app.logger.info(f'Experiment parameters: {params}')
+    # Terminate on CloudLab
     (exitval, response) = api.terminateExperiment(server, params).apply()
-    app.logger.info(f'ExitVal: {exitval}')
-    app.logger.info(f'Response: {response}')
-    return ERRORMESSAGES[exitval]
+    app.logger.info(f"terminateExperiment exitval={exitval}, response={response}")
 
+    if exitval == 0:
+        # Typically, the Terraform provider passes "experiment=<UUID>"
+        # or "name=<UUID>" in the form data. We'll unify that:
+        uuid_to_delete = params.get('experiment') or params.get('name', '')
+        app.logger.info(f"CloudLab termination successful; cleaning up doc(s) for uuid='{uuid_to_delete}' in Firestore.")
+
+        # 1. Delete from experiments by matching 'uuid'
+        exp_docs = db.collection('experiments').where('uuid', '==', uuid_to_delete).stream()
+        exp_list = list(exp_docs)
+        app.logger.info(f"Found {len(exp_list)} experiment doc(s) with uuid='{uuid_to_delete}'. Deleting...")
+        for doc in exp_list:
+            doc_id = doc.id
+            doc.reference.delete()
+            app.logger.info(f"Deleted experiment doc '{doc_id}' in Firestore.")
+
+        return ERRORMESSAGES[exitval]
+
+    else:
+        app.logger.error("Failed to terminate on CloudLab; skipping Firestore cleanup.")
+        return ERRORMESSAGES.get(exitval, ERRORMESSAGES[RESPONSE_ERROR])
+
+# -------------------------------------------------------------------
+# Listing all experiments, for completeness
+# -------------------------------------------------------------------
 @app.route('/experiments', methods=['GET'])
 def listExperiments():
     try:
@@ -323,14 +364,12 @@ def listExperiments():
 
         query = experiments_ref
         if filter_name:
-            query = query.where('name', '==', filter_name)
+            query = query.where('friendlyName', '==', filter_name)
         if filter_project:
             query = query.where('project', '==', filter_project)
 
         experiments = query.stream()
-        experiments_list = [
-            exp.to_dict() for exp in experiments
-        ]
+        experiments_list = [exp.to_dict() for exp in experiments]
         return jsonify(experiments_list), 200
 
     except Exception as e:
@@ -338,9 +377,9 @@ def listExperiments():
         return jsonify({'error': str(e)}), 500
 
 
-
-
+# -------------------------------------------------------------------
+# Main entry point
+# -------------------------------------------------------------------
 if __name__ == '__main__':
-    # Specify the port you want to use, for example, port 8080
     port = 8080
     app.run(debug=True, port=port, host='0.0.0.0')
