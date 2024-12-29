@@ -137,50 +137,6 @@ def parse_uuid_from_response(response_string: str) -> str:
 # - Immediately calls experimentStatus to fetch real UUID
 # - Updates Firestore doc with the correct UUID
 # -------------------------------------------------------------------
-# @app.route('/experiment', methods=['POST'])
-# def startExperiment():
-#     app.logger.info("startExperiment")
-
-#     args, err = parseArgs(request)
-#     errVal, errCode = err
-#     if errCode != 200:
-#         return err
-#     file, params = args
-
-#     if 'proj' not in params or 'profile' not in params:
-#         return "Project and/or profile param not provided", 400
-
-#     config = {
-#         "debug": 0,
-#         "impotent": 0,
-#         "verify": 0,
-#         "certificate": file,
-#     }
-#     app.logger.info(f'Server configuration: {config}')
-#     server = xmlrpc.EmulabXMLRPC(config)
-
-#     # Start experiment on Emulab
-#     app.logger.info('Starting Experiment')
-#     if 'bindings' in params and isinstance(params['bindings'], dict):
-#         params['bindings'] = dict_to_json(params['bindings'])
-
-#     (exitval, response) = api.startExperiment(server, params).apply()
-#     app.logger.info(f'ExitVal: {exitval}')
-#     app.logger.info(f'Response: {response}')
-
-#     if exitval == 0:
-#         experiment_data = {
-#             'name': params['name'],
-#             'project': params['proj'],
-#             'status': 'started',
-#             'created_at': time.time()
-#         }
-#         db.collection('experiments').document(params['name']).set(experiment_data)
-#         app.logger.info(f"Experiment '{params['name']}' saved to Firestore.")
-#     else:
-#         app.logger.info("Experiment creation failed. No VLAN rollback necessary since VLAN logic removed.")
-
-#     return ERRORMESSAGES.get(exitval, ERRORMESSAGES[RESPONSE_ERROR])
 
 @app.route('/experiment', methods=['POST'])
 def startExperiment():
@@ -247,7 +203,7 @@ def startExperiment():
 
         # 5. Save experiment metadata to Firestore (no VLAN collection used)
         experiment_data = {
-            'name': params['name'],      # friendly name
+            'name': params['name'],      # name
             'uuid': cloudlab_uuid,       # actual CloudLab UUID
             'project': params['proj'],
             'status': 'started',
@@ -267,7 +223,6 @@ def startExperiment():
 
 # -------------------------------------------------------------------
 # API: experimentStatus (GET /experiment)
-# - Provided here for completeness. Adjust as needed.
 # -------------------------------------------------------------------
 @app.route('/experiment', methods=['GET'])
 def experimentStatus():
@@ -281,8 +236,6 @@ def experimentStatus():
     if 'proj' not in params or 'experiment' not in params:
         return "Project and/or experiment param not provided", 400
 
-    # Possibly CloudLab expects experiment param as "proj,experimentName"
-    # or as a direct name. Adjust as needed:
     params['experiment'] = f"{params['proj']},{params['experiment']}"
 
     config = {
@@ -305,7 +258,7 @@ def experimentStatus():
 # -------------------------------------------------------------------
 # Example: Terminate Experiment (DELETE /experiment)
 # - Looks up doc(s) by UUID if Terraform sends "experiment=<theUUID>"
-# - Provided for completeness, so you see how the UUID is used.
+# .
 # -------------------------------------------------------------------
 @app.route('/experiment', methods=['DELETE'])
 def terminateExperiment():
@@ -353,21 +306,66 @@ def terminateExperiment():
         return ERRORMESSAGES.get(exitval, ERRORMESSAGES[RESPONSE_ERROR])
 
 # -------------------------------------------------------------------
-# Listing all experiments, for completeness
+# Listing all experiments
+#
+
+# -------------------------------------------------------------------
+# Listing all experiments with optional filters if no field is provided 
+# 
+# curl "http://localhost:8080/experiments"
+# curl "http://localhost:8080/experiments?name=vm1"
+# curl "http://localhost:8080/experiments?proj=UCY-CS499-DC"
+# curl http://localhost:8080/experiments?uuid="9d7b78b5-c5fd-11ef-af1a-e4434b2381fc"
+# curl "http://localhost:8080/experiments?name_startswith=a"
+# curl http://localhost:8080/experiments?uuid_startswith="9"
+# 
 # -------------------------------------------------------------------
 @app.route('/experiments', methods=['GET'])
 def listExperiments():
     try:
         filter_name = request.args.get('name')
         filter_project = request.args.get('proj')
+        filter_name_startswith = request.args.get('name_startswith')
         experiments_ref = db.collection('experiments')
-
+        filter_uuid = request.args.get('uuid')
+        filter_uuid_startswith = request.args.get('uuid_startswith')
         query = experiments_ref
+
+        
+        # Apply exact name filter if provided
         if filter_name:
-            query = query.where('friendlyName', '==', filter_name)
+            query = query.where('name', '==', filter_name)
+
+        # Apply project filter if provided
         if filter_project:
             query = query.where('project', '==', filter_project)
+         # Apply exact uuid filter if provided
+        if filter_uuid:
+            query = query.where('uuid','==',filter_uuid)
 
+        # Apply name_startswith filter if provided
+        if filter_name_startswith:
+            # Firestore requires range queries to have an index
+            # Define the start and end of the range
+            start = filter_name_startswith
+            # Increment the last character to get the upper bound
+            # Example: 'test' -> 'tesu' assuming 't'->'u'
+            # To handle edge cases, append a high Unicode character
+            end = filter_name_startswith + u'\uf8ff'
+            query = query.where('name', '>=', start).where('name', '<=', end)
+
+        # Apply uuid_startswith filter if provided
+        if filter_uuid_startswith:
+            # Firestore requires range queries to have an index
+            # Define the start and end of the range
+            start = filter_uuid_startswith
+            # Increment the last character to get the upper bound
+            # Example: 'test' -> 'tesu' assuming 't'->'u'
+            # To handle edge cases, append a high Unicode character
+            end = filter_uuid_startswith + u'\uf8ff'
+            query = query.where('uuid', '>=', start).where('uuid', '<=', end)
+        
+        
         experiments = query.stream()
         experiments_list = [exp.to_dict() for exp in experiments]
         return jsonify(experiments_list), 200
@@ -375,6 +373,7 @@ def listExperiments():
     except Exception as e:
         app.logger.error(f"Error listing experiments: {e}")
         return jsonify({'error': str(e)}), 500
+
 
 
 # -------------------------------------------------------------------

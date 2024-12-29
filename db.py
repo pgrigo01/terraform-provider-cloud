@@ -17,7 +17,7 @@ def initialize_firebase():
     except ValueError:
         try:
             # Path to your service account key
-            cred = credentials.Certificate('serviceAccountKey.json')  # Update this path
+            cred = credentials.Certificate('serviceAccountKey.json')  # Update this path or include the file in this directory
             firebase_admin.initialize_app(cred)
             logger.info("Firebase initialized successfully.")
         except Exception as e:
@@ -101,7 +101,7 @@ class Vlan:
             ]
             if vlans:
                 logger.info(f"VLANs for experiment '{experiment}' retrieved from Firestore.")
-                return vlans[0]  # Adjust if multiple VLANs per experiment are possible
+                return vlans[0]  
             logger.warning(f"No VLANs found for experiment '{experiment}' in Firestore.")
             return None
         except Exception as e:
@@ -110,60 +110,5 @@ class Vlan:
 
 if __name__ == "__main__":
     logger.info("db.py executed as a script.")
-    # If you need to perform any standalone operations, add them here.
+    
 
-
-# import firebase_admin
-# from firebase_admin import credentials, firestore
-# import logging
-
-# # Configure Logging
-# logging.basicConfig(level=logging.INFO)
-# logger = logging.getLogger(__name__)
-
-# # Initialize Firebase
-# def initialize_firebase():
-#     try:
-#         firebase_admin.get_app()
-#         logger.info("Firebase app already initialized.")
-#     except ValueError:
-#         cred = credentials.Certificate("serviceAccountKey.json")
-#         firebase_admin.initialize_app(cred)
-#         logger.info("Firebase initialized successfully.")
-
-# initialize_firebase()
-# db = firestore.client()
-
-# class Vlan:
-#     COLLECTION_NAME = 'vlans'
-
-#     def __init__(self, name, experiment, ready):
-#         self.name = name
-#         self.experiment = experiment
-#         self.ready = ready
-
-#     def save(self):
-#         data = {
-#             'name': self.name,
-#             'experiment': self.experiment,
-#             'ready': self.ready
-#         }
-#         db.collection(self.COLLECTION_NAME).document(self.name).set(data)
-#         logger.info(f"VLAN '{self.name}' saved.")
-
-#     def delete(self):
-#         db.collection(self.COLLECTION_NAME).document(self.name).delete()
-#         logger.info(f"VLAN '{self.name}' deleted.")
-
-#     @staticmethod
-#     def filterByName(name):
-#         doc = db.collection(Vlan.COLLECTION_NAME).document(name).get()
-#         if doc.exists:
-#             data = doc.to_dict()
-#             return Vlan(data['name'], data['experiment'], data['ready'])
-#         return None
-
-#     @staticmethod
-#     def all():
-#         vlans = db.collection(Vlan.COLLECTION_NAME).stream()
-#         return [Vlan(v.to_dict()['name'], v.to_dict()['experiment'], v.to_dict()['ready']) for v in vlans]
