@@ -9,7 +9,7 @@ import CloudLabAPI.src.emulab_sslxmlrpc.xmlrpc as xmlrpc
 import tempfile
 
 from db import db  # Firestore client
-from db import Vlan
+#from db import Vlan
 
 app = Flask(__name__)
 app.logger.setLevel('DEBUG')  # or INFO, as you prefer
@@ -180,12 +180,11 @@ def startExperiment():
         cloudlab_uuid = parse_uuid_from_response(str(response))
         app.logger.info(f"Parsed UUID from startExperiment: '{cloudlab_uuid}'")
 
-        # 4b. If that fails, call experimentStatus to get the correct UUID
+        # 4b. If that fails, call experimentStatus to get the correct UUID 
         if not cloudlab_uuid:
             app.logger.info("Could not parse UUID from startExperiment. Checking experimentStatus for the real UUID...")
             status_params = {
                 'proj': params['proj'],
-                # Many CloudLab setups expect 'experiment': "proj,experimentName"
                 'experiment': f"{params['proj']},{params['name']}"
             }
             (status_exitval, status_response) = api.experimentStatus(server, status_params).apply()
@@ -201,7 +200,7 @@ def startExperiment():
         if not cloudlab_uuid:
             cloudlab_uuid = "unknown"
 
-        # 5. Save experiment metadata to Firestore (no VLAN collection used)
+        # 5. Save experiment metadata to Firestore 
         experiment_data = {
             'name': params['name'],      # name
             'uuid': cloudlab_uuid,       # actual CloudLab UUID
@@ -290,7 +289,7 @@ def terminateExperiment():
         uuid_to_delete = params.get('experiment') or params.get('name', '')
         app.logger.info(f"CloudLab termination successful; cleaning up doc(s) for uuid='{uuid_to_delete}' in Firestore.")
 
-        # 1. Delete from experiments by matching 'uuid'
+        # 1. Delete from experiments in Firebase  by matching 'uuid'
         exp_docs = db.collection('experiments').where('uuid', '==', uuid_to_delete).stream()
         exp_list = list(exp_docs)
         app.logger.info(f"Found {len(exp_list)} experiment doc(s) with uuid='{uuid_to_delete}'. Deleting...")
@@ -305,13 +304,9 @@ def terminateExperiment():
         app.logger.error("Failed to terminate on CloudLab; skipping Firestore cleanup.")
         return ERRORMESSAGES.get(exitval, ERRORMESSAGES[RESPONSE_ERROR])
 
-# -------------------------------------------------------------------
-# Listing all experiments
-#
 
 # -------------------------------------------------------------------
-# Listing all experiments with optional filters if no field is provided 
-# 
+# Listing all experiments  if no filter is provided.  
 # curl "http://localhost:8080/experiments"
 # curl "http://localhost:8080/experiments?name=vm1"
 # curl "http://localhost:8080/experiments?proj=UCY-CS499-DC"
