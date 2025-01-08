@@ -9,10 +9,9 @@ import CloudLabAPI.src.emulab_sslxmlrpc.xmlrpc as xmlrpc
 import tempfile
 
 from db import db  # Firestore client
-#from db import Vlan
 
 app = Flask(__name__)
-app.logger.setLevel('DEBUG')  # or INFO, as you prefer
+app.logger.setLevel('INFO')  
 
 # --------------------------
 # Error / Status Constants
