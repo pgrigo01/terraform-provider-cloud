@@ -2,11 +2,13 @@ import json
 import re
 import time
 from io import BytesIO
+import threading
+from datetime import datetime, timedelta
+import tempfile
 
 from flask import Flask, request, jsonify, Request
 import CloudLabAPI.src.emulab_sslxmlrpc.client.api as api
 import CloudLabAPI.src.emulab_sslxmlrpc.xmlrpc as xmlrpc
-import tempfile
 
 from db import db  # Firestore client
 
@@ -117,7 +119,6 @@ def parseArgs(req: Request):
 
 # -------------------------------------------------------------------
 # Helper: Example function to parse UUID from any given string
-#         Adjust the regex or logic to match your CloudLab responses
 # -------------------------------------------------------------------
 def parse_uuid_from_response(response_string: str) -> str:
     """
@@ -136,7 +137,6 @@ def parse_uuid_from_response(response_string: str) -> str:
 # - Immediately calls experimentStatus to fetch real UUID
 # - Updates Firestore doc with the correct UUID
 # -------------------------------------------------------------------
-
 @app.route('/experiment', methods=['POST'])
 def startExperiment():
     app.logger.info("startExperiment")
@@ -166,9 +166,7 @@ def startExperiment():
     # 3. Start the experiment on Emulab
     app.logger.info('Starting Experiment')
     if 'bindings' in params and isinstance(params['bindings'], dict):
-        # Convert the 'bindings' dict to a JSON string if needed
         params['bindings'] = dict_to_json(params['bindings'])
-
     app.logger.info(f'Experiment parameters: {params}')
     (exitval, response) = api.startExperiment(server, params).apply()
     app.logger.info(f'ExitVal: {exitval}')
@@ -199,24 +197,25 @@ def startExperiment():
         if not cloudlab_uuid:
             cloudlab_uuid = "unknown"
 
-        # 5. Save experiment metadata to Firestore 
+        # 5. Save experiment metadata to Firestore with TTL
+        now = datetime.utcnow()
+        expire_at = now + timedelta(hours=16)  # TTL set to 16 hours from now 
+
         experiment_data = {
-            'name': params['name'],      # name
-            'uuid': cloudlab_uuid,       # actual CloudLab UUID
+            'name': params['name'],      # experiment name
+            'uuid': cloudlab_uuid,       # CloudLab UUID
             'project': params['proj'],
             'status': 'started',
-            'created_at': time.time()
+            'created_at': now,           # timestamp of creation (UTC)
+            'expireAt': expire_at        # new TTL field
         }
         db.collection('experiments').document(params['name']).set(experiment_data)
-        app.logger.info(f"Experiment '{params['name']}' (uuid='{cloudlab_uuid}') saved to Firestore.")
+        app.logger.info(f"Experiment '{params['name']}' (uuid='{cloudlab_uuid}') saved to Firestore with expireAt={expire_at}.")
 
     else:
-        # If experiment fails, we do not do VLAN rollback anymore (no VLANs used).
         app.logger.info("Experiment creation failed on CloudLab. No VLAN collection to rollback.")
 
-    # 6. Return final result
     return ERRORMESSAGES.get(exitval, ERRORMESSAGES[RESPONSE_ERROR])
-
 
 
 # -------------------------------------------------------------------
@@ -249,14 +248,11 @@ def experimentStatus():
     app.logger.info(f'ExitVal: {exitval}')
     app.logger.info(f'Response: {response}')
 
-    # Return the raw output or some JSON, as you prefer
     return (str(response.output), ERRORMESSAGES[exitval][1]) 
 
 
 # -------------------------------------------------------------------
-# Example: Terminate Experiment (DELETE /experiment)
-# - Looks up doc(s) by UUID if Terraform sends "experiment=<theUUID>"
-# .
+# API: Terminate Experiment (DELETE /experiment)
 # -------------------------------------------------------------------
 @app.route('/experiment', methods=['DELETE'])
 def terminateExperiment():
@@ -283,12 +279,9 @@ def terminateExperiment():
     app.logger.info(f"terminateExperiment exitval={exitval}, response={response}")
 
     if exitval == 0:
-        # Typically, the Terraform provider passes "experiment=<UUID>"
-        # or "name=<UUID>" in the form data. We'll unify that:
         uuid_to_delete = params.get('experiment') or params.get('name', '')
         app.logger.info(f"CloudLab termination successful; cleaning up doc(s) for uuid='{uuid_to_delete}' in Firestore.")
 
-        # 1. Delete from experiments in Firebase  by matching 'uuid'
         exp_docs = db.collection('experiments').where('uuid', '==', uuid_to_delete).stream()
         exp_list = list(exp_docs)
         app.logger.info(f"Found {len(exp_list)} experiment doc(s) with uuid='{uuid_to_delete}'. Deleting...")
@@ -298,21 +291,13 @@ def terminateExperiment():
             app.logger.info(f"Deleted experiment doc '{doc_id}' in Firestore.")
 
         return ERRORMESSAGES[exitval]
-
     else:
         app.logger.error("Failed to terminate on CloudLab; skipping Firestore cleanup.")
         return ERRORMESSAGES.get(exitval, ERRORMESSAGES[RESPONSE_ERROR])
 
 
 # -------------------------------------------------------------------
-# Listing all experiments  if no filter is provided.  
-# curl "http://localhost:8080/experiments"
-# curl "http://localhost:8080/experiments?name=vm1"
-# curl "http://localhost:8080/experiments?proj=UCY-CS499-DC"
-# curl http://localhost:8080/experiments?uuid="9d7b78b5-c5fd-11ef-af1a-e4434b2381fc"
-# curl "http://localhost:8080/experiments?name_startswith=a"
-# curl http://localhost:8080/experiments?uuid_startswith="9"
-# 
+# Listing all experiments (GET /experiments)
 # -------------------------------------------------------------------
 @app.route('/experiments', methods=['GET'])
 def listExperiments():
@@ -325,7 +310,6 @@ def listExperiments():
         filter_uuid_startswith = request.args.get('uuid_startswith')
         query = experiments_ref
 
-        
         # Apply exact name filter if provided
         if filter_name:
             query = query.where('name', '==', filter_name)
@@ -333,32 +317,22 @@ def listExperiments():
         # Apply project filter if provided
         if filter_project:
             query = query.where('project', '==', filter_project)
-         # Apply exact uuid filter if provided
+        
+        # Apply exact uuid filter if provided
         if filter_uuid:
-            query = query.where('uuid','==',filter_uuid)
+            query = query.where('uuid', '==', filter_uuid)
 
         # Apply name_startswith filter if provided
         if filter_name_startswith:
-            # Firestore requires range queries to have an index
-            # Define the start and end of the range
             start = filter_name_startswith
-            # Increment the last character to get the upper bound
-            # Example: 'test' -> 'tesu' assuming 't'->'u'
-            # To handle edge cases, append a high Unicode character
             end = filter_name_startswith + u'\uf8ff'
             query = query.where('name', '>=', start).where('name', '<=', end)
 
         # Apply uuid_startswith filter if provided
         if filter_uuid_startswith:
-            # Firestore requires range queries to have an index
-            # Define the start and end of the range
             start = filter_uuid_startswith
-            # Increment the last character to get the upper bound
-            # Example: 'test' -> 'tesu' assuming 't'->'u'
-            # To handle edge cases, append a high Unicode character
             end = filter_uuid_startswith + u'\uf8ff'
             query = query.where('uuid', '>=', start).where('uuid', '<=', end)
-        
         
         experiments = query.stream()
         experiments_list = [exp.to_dict() for exp in experiments]
@@ -369,6 +343,29 @@ def listExperiments():
         return jsonify({'error': str(e)}), 500
 
 
+# -------------------------------------------------------------------
+# Background Task: Delete expired documents every minute
+# -------------------------------------------------------------------
+def delete_expired_documents():
+    with app.app_context():
+        now = datetime.utcnow()
+        expired_docs = db.collection('experiments').where('expireAt', '<=', now).stream()
+        deleted_count = 0
+        for doc in expired_docs:
+            doc.reference.delete()
+            deleted_count += 1
+            app.logger.info(f"Deleted expired document: {doc.id}")
+        if deleted_count:
+            app.logger.info(f"Total expired documents deleted: {deleted_count}")
+
+def schedule_deletion():
+    while True:
+        delete_expired_documents()
+        time.sleep(60)  # run every minute
+
+# Start the background deletion thread
+threading.Thread(target=schedule_deletion, daemon=True).start()
+
 
 # -------------------------------------------------------------------
 # Main entry point
@@ -376,4 +373,3 @@ def listExperiments():
 if __name__ == '__main__':
     port = 8080
     app.run(debug=True, port=port, host='0.0.0.0')
-
