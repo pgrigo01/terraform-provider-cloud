@@ -13,19 +13,27 @@ import (
 	"terraform-provider-cloudlab/internal/provider"
 )
 
-// Run "go generate" to format example terraform files and generate the docs for the registry/website
-
-// If you do not have terraform installed, you can remove or comment out the formatting command.
+// Run "go generate" to format example Terraform files if Terraform is installed.
 //go:generate terraform fmt -recursive ./examples/
 
-// First, build the provider binary.
+// Build the provider binary so tfplugindocs can read its schema.
 //go:generate go build -o terraform-provider-cloudlab
 
-// Now run the docs generation tool using the built binary and specify the provider name.
-//go:generate go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs -provider-name=cloudlab -provider=./terraform-provider-cloudlab
+// Generate docs using the older-style tfplugindocs flags.
+// (Your installed version does not support --dir or --provider.)
+//   -provider-dir=.           : Tells tfplugindocs to look for provider code in the current directory.
+//   -provider-name=cloudlab   : The logical name of your provider in Terraform configs.
+//   -rendered-provider-name=cloudlab : The name to display in generated docs.
+//
+// You can add other flags (e.g. -examples-dir, -rendered-website-dir) if desired.
+//
+// Note: If you need to pass a specific Terraform version or skip building the provider,
+// check the usage text you saw in the error to find the appropriate flags.
+//
+//go:generate go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs -provider-dir=. -provider-name=cloudlab -rendered-provider-name=cloudlab
 
 var (
-	// these will be set by the goreleaser configuration
+	// These will be set by the goreleaser configuration
 	// to appropriate values for the compiled binary.
 	version string = "dev"
 )
@@ -47,7 +55,6 @@ func main() {
 	}
 
 	err := providerserver.Serve(context.Background(), provider.New(version), opts)
-
 	if err != nil {
 		log.Fatal(err.Error())
 	}
