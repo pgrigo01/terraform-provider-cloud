@@ -77,7 +77,7 @@ jobs:
 
       # Install Terraform so go generate can invoke it
       - name: Install Terraform
-        uses: hashicorp/setup-terraform@v2
+        uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: '1.9.5'
           terraform_wrapper: false
@@ -123,7 +123,7 @@ jobs:
             ${{ runner.os }}-go-
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v2
+        uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: ${{ matrix.terraform }}
           terraform_wrapper: false
