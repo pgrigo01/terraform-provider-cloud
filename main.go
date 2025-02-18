@@ -16,12 +16,13 @@ import (
 // Run "go generate" to format example terraform files and generate the docs for the registry/website
 
 // If you do not have terraform installed, you can remove or comment out the formatting command.
-// Uncomment the following line if Terraform is installed and you want to format the examples.
 //go:generate terraform fmt -recursive ./examples/
 
-// Run the docs generation tool, check its repository for more information on how it works and how docs
-// can be customized.
-//go:generate go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs
+// First, build the provider binary.
+//go:generate go build -o terraform-provider-cloudlab
+
+// Now run the docs generation tool using the built binary and specify the provider name.
+//go:generate go run github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs -provider-name=cloudlab -provider=./terraform-provider-cloudlab
 
 var (
 	// these will be set by the goreleaser configuration
