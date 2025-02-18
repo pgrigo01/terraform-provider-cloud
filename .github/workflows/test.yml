@@ -42,6 +42,13 @@ jobs:
         with:
           go-version-file: 'go.mod'
           cache: true
+      
+      # Install Terraform so go generate can invoke it
+      - uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: '1.9.5'
+          terraform_wrapper: false
+
       - run: go generate ./...
       - name: git diff
         run: |

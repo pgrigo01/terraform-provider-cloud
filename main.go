@@ -15,8 +15,8 @@ import (
 
 // Run "go generate" to format example terraform files and generate the docs for the registry/website
 
-// If you do not have terraform installed, you can remove the formatting command, but its suggested to
-// ensure the documentation is formatted properly.
+// If you do not have terraform installed, you can remove or comment out the formatting command.
+// Uncomment the following line if Terraform is installed and you want to format the examples.
 //go:generate terraform fmt -recursive ./examples/
 
 // Run the docs generation tool, check its repository for more information on how it works and how docs
@@ -27,9 +27,6 @@ var (
 	// these will be set by the goreleaser configuration
 	// to appropriate values for the compiled binary.
 	version string = "dev"
-
-	// goreleaser can pass other information to the main package, such as the specific commit
-	// https://goreleaser.com/cookbooks/using-main.version/
 )
 
 func main() {
