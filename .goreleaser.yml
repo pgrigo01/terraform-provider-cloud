@@ -1,60 +1,59 @@
-# Visit https://goreleaser.com for documentation on how to customize this
-# behavior.
-before:
-  hooks:
-    # this is just an example and not a requirement for provider building/publishing
-    - go mod tidy
+# The name that appears in your GitHub releases, etc.
+project_name: "terraform-provider-cloudlab"
+
+release:
+  github:
+    prerelease: false
+
 builds:
-- env:
-    # goreleaser does not work with CGO, it could also complicate
-    # usage by users in CI/CD systems like Terraform Cloud where
-    # they are unable to install libraries.
-    - CGO_ENABLED=0
-  mod_timestamp: '{{ .CommitTimestamp }}'
-  flags:
-    - -trimpath
-  ldflags:
-    - '-s -w -X main.version={{.Version}} -X main.commit={{.Commit}}'
-  goos:
-    - freebsd
-    - windows
-    - linux
-    - darwin
-  goarch:
-    - amd64
-    - '386'
-    - arm
-    - arm64
-  ignore:
-    - goos: darwin
-      goarch: '386'
-  binary: '{{ .ProjectName }}_v{{ .Version }}'
+  - id: cloudlab
+    main: ./main.go
+    # The base name of your binary (without OS/arch suffix).
+    # This matches the older style you showed: terraform-provider-cloudlab_2.1.0_darwin_amd64.zip, etc.
+    binary: "terraform-provider-cloudlab_{{.Version}}"
+    goos:
+      - linux
+      - darwin
+      - windows
+      - freebsd
+    goarch:
+      - amd64
+      - 386
+      - arm64
+    # Turn off CGO for simpler static binaries
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - "-s -w -X main.version={{.Version}}"
+
+# Tell GoReleaser how to package each build.
 archives:
-- format: zip
-  name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}'
+  - id: release
+    builds:
+      - cloudlab
+    # Zip is typical for Terraform providers
+    format: zip
+    # We'll produce a file named, e.g., terraform-provider-cloudlab_2.2.0_darwin_amd64.zip
+    name_template: "{{ .Binary }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+
+# Generate a checksums file for all artifacts.
 checksum:
-  extra_files:
-    - glob: 'terraform-registry-manifest.json'
-      name_template: '{{ .ProjectName }}_{{ .Version }}_manifest.json'
-  name_template: '{{ .ProjectName }}_{{ .Version }}_SHA256SUMS'
-  algorithm: sha256
+  name_template: "checksums.txt"
+
+# Optional GPG signing (only works if you imported a GPG key in the workflow).
 signs:
-  - artifacts: checksum
+  - cmd: gpg
     args:
-      # if you are using this in a GitHub action or some other automated pipeline, you 
-      # need to pass the batch flag to indicate its not interactive.
       - "--batch"
-      - "--local-user"
-      - "{{ .Env.GPG_FINGERPRINT }}" # set this environment variable for your signing key
+      - "--pinentry-mode"
+      - "loopback"
+      - "--passphrase-fd"
+      - "0"
       - "--output"
       - "${signature}"
       - "--detach-sign"
       - "${artifact}"
-release:
-  extra_files:
-    - glob: 'terraform-registry-manifest.json'
-      name_template: '{{ .ProjectName }}_{{ .Version }}_manifest.json'
-  # If you want to manually examine the release before its live, uncomment this line:
-  # draft: true
-changelog:
-  skip: true
+    signature: "${artifact}.sig"
