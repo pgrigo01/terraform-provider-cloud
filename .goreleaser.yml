@@ -1,15 +1,9 @@
-# The name that appears in your GitHub releases, etc.
+# .goreleaser.yml
 project_name: "terraform-provider-cloudlab"
-
-release:
-  github:
-    prerelease: false
 
 builds:
   - id: cloudlab
     main: ./main.go
-    # The base name of your binary (without OS/arch suffix).
-    # This matches the older style you showed: terraform-provider-cloudlab_2.1.0_darwin_amd64.zip, etc.
     binary: "terraform-provider-cloudlab_{{.Version}}"
     goos:
       - linux
@@ -20,40 +14,20 @@ builds:
       - amd64
       - 386
       - arm64
-    # Turn off CGO for simpler static binaries
     env:
       - CGO_ENABLED=0
-    ldflags:
-      - "-s -w -X main.version={{.Version}}"
 
-# Tell GoReleaser how to package each build.
 archives:
   - id: release
     builds:
       - cloudlab
-    # Zip is typical for Terraform providers
     format: zip
-    # We'll produce a file named, e.g., terraform-provider-cloudlab_2.2.0_darwin_amd64.zip
     name_template: "{{ .Binary }}_{{ .Os }}_{{ .Arch }}"
     files:
       - LICENSE
       - README.md
 
-# Generate a checksums file for all artifacts.
 checksum:
   name_template: "checksums.txt"
 
-# Optional GPG signing (only works if you imported a GPG key in the workflow).
-signs:
-  - cmd: gpg
-    args:
-      - "--batch"
-      - "--pinentry-mode"
-      - "loopback"
-      - "--passphrase-fd"
-      - "0"
-      - "--output"
-      - "${signature}"
-      - "--detach-sign"
-      - "${artifact}"
-    signature: "${artifact}.sig"
+# If you don't want GPG signing, remove or comment out the 'signs:' block
