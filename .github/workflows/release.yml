@@ -1,33 +1,37 @@
 name: Release
 
 on:
+  # Trigger on any new tag that starts with "v" (e.g., v2.4.0).
   push:
-    branches:
-      - main
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
 
 jobs:
-  build:
+  goreleaser:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-
-      - name: Set up Go
-        uses: actions/setup-go@v2
+      # 1. Check out the repo
+      - uses: actions/checkout@v3
         with:
-          go-version: 1.23.2
+          # fetch-depth=0 so GoReleaser can read all tags/commits.
+          fetch-depth: 0
 
-      - name: Cache Go modules
-        id: cache-go-mod
-        uses: actions/cache@v2
+      # 2. Set up Go
+      - uses: actions/setup-go@v4
         with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          # This will look at your go.mod to pick the Go version, or you can hardcode e.g. "go-version: 1.20"
+          go-version-file: 'go.mod'
+          cache: true
 
-      - name: Build
-        run: go build -v ./...
+      # 3. Run GoReleaser to build for multiple OS/arch and create a GitHub release
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v5
+        with:
+          # --clean ensures the dist/ folder is fresh each time
+          args: release --clean
+        env:
+          # GitHub automatically sets this secret token
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
