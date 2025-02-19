@@ -2,36 +2,32 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*'
-
-permissions:
-  contents: write
+    branches:
+      - main
 
 jobs:
-  goreleaser:
+  build:
     runs-on: ubuntu-latest
+
     steps:
-      # 1. Check out the repo
-      - uses: actions/checkout@v3
-        with:
-          # Allow GoReleaser to access older tags for proper semver info.
-          fetch-depth: 0
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-      # 2. Set up Go
-      - uses: actions/setup-go@v4
+      - name: Set up Go
+        uses: actions/setup-go@v2
         with:
-          # This ensures we use the version in go.mod, so you don’t have to hardcode it here.
-          go-version-file: 'go.mod'
-          cache: true
+          go-version: 1.23.2
 
-     
-      # 3. Run GoReleaser
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v5.0.0
+      - name: Cache Go modules
+        id: cache-go-mod
+        uses: actions/cache@v2
         with:
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Pass the GPG fingerprint to GoReleaser if you’re signing.
-          GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+
+      - name: Build
+        run: go build -v ./...
