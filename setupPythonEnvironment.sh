@@ -1,8 +1,12 @@
 #!/bin/bash
 
 # Activate the virtual environment
-source myenv/bin/activate
+sudo apt update
+sudo apt install python3-pip
 
+source myenv/bin/activate
+sudo apt install python3-pip
+sudo apt-get install python3-pip
 sudo apt install python-pip
 sudo apt-get install python-pip
 
