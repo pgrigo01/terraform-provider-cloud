@@ -1,7 +1,7 @@
 terraform {
   required_providers {
     cloudlab = {
-      source  = "pgrigo01/terraform/cloudlab"
+      source  = "pgrigo01/cloudlab"
       version = "2.2.0"
     }
   }
@@ -11,7 +11,6 @@ terraform {
 provider "cloudlab" {
   project          = "UCY-CS499-DC"
   credentials_path = "cloudlab-decrypted.pem"
-  
 }
 
 resource "cloudlab_vlan" "my_cloudlab_vlan" {
