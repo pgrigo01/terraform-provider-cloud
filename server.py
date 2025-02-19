@@ -163,57 +163,67 @@ def startExperiment():
     app.logger.info(f'Server configuration: {config}')
     server = xmlrpc.EmulabXMLRPC(config)
 
-    # 3. Start the experiment on Emulab
-    app.logger.info('Starting Experiment')
+    # 3. Prepare experiment parameters
     if 'bindings' in params and isinstance(params['bindings'], dict):
         params['bindings'] = dict_to_json(params['bindings'])
     app.logger.info(f'Experiment parameters: {params}')
-    (exitval, response) = api.startExperiment(server, params).apply()
-    app.logger.info(f'ExitVal: {exitval}')
-    app.logger.info(f'Response: {response}')
 
-    if exitval == 0:
-        # 4a. Try to parse the UUID from the startExperiment response
-        cloudlab_uuid = parse_uuid_from_response(str(response))
-        app.logger.info(f"Parsed UUID from startExperiment: '{cloudlab_uuid}'")
+    # 4. Retry logic for starting the experiment
+    max_retries = 5
+    retry_delay = 3  # seconds
+    for attempt in range(1, max_retries + 1):
+        (exitval, response) = api.startExperiment(server, params).apply()
+        app.logger.info(f"startExperiment attempt {attempt}/{max_retries}: exitval={exitval}, response={response}")
+        if exitval == 0:
+            break
+        else:
+            app.logger.warning(
+                f"startExperiment attempt {attempt} failed with exitval={exitval}. Retrying in {retry_delay} seconds..."
+            )
+            time.sleep(retry_delay)
 
-        # 4b. If that fails, call experimentStatus to get the correct UUID 
-        if not cloudlab_uuid:
-            app.logger.info("Could not parse UUID from startExperiment. Checking experimentStatus for the real UUID...")
-            status_params = {
-                'proj': params['proj'],
-                'experiment': f"{params['proj']},{params['name']}"
-            }
-            (status_exitval, status_response) = api.experimentStatus(server, status_params).apply()
-            app.logger.info(f"experimentStatus exitval={status_exitval}, response={status_response}")
-            if status_exitval == 0:
-                cloudlab_uuid = parse_uuid_from_response(str(status_response))
-                app.logger.info(f"Parsed UUID from experimentStatus: '{cloudlab_uuid}'")
-            else:
-                app.logger.warning("experimentStatus call failed. Storing 'unknown' for UUID.")
-                cloudlab_uuid = "unknown"
+    # If all attempts failed, return an error
+    if exitval != 0:
+        app.logger.error("All attempts to start experiment failed.")
+        return ERRORMESSAGES.get(exitval, ERRORMESSAGES[RESPONSE_ERROR])
 
-        # 4c. If still not found, store 'unknown'
-        if not cloudlab_uuid:
+    # 5. Try to parse the UUID from the startExperiment response
+    cloudlab_uuid = parse_uuid_from_response(str(response))
+    app.logger.info(f"Parsed UUID from startExperiment: '{cloudlab_uuid}'")
+
+    # If parsing fails, call experimentStatus to get the correct UUID 
+    if not cloudlab_uuid:
+        app.logger.info("Could not parse UUID from startExperiment. Checking experimentStatus for the real UUID...")
+        status_params = {
+            'proj': params['proj'],
+            'experiment': f"{params['proj']},{params['name']}"
+        }
+        (status_exitval, status_response) = api.experimentStatus(server, status_params).apply()
+        app.logger.info(f"experimentStatus exitval={status_exitval}, response={status_response}")
+        if status_exitval == 0:
+            cloudlab_uuid = parse_uuid_from_response(str(status_response))
+            app.logger.info(f"Parsed UUID from experimentStatus: '{cloudlab_uuid}'")
+        else:
+            app.logger.warning("experimentStatus call failed. Storing 'unknown' for UUID.")
             cloudlab_uuid = "unknown"
 
-        # 5. Save experiment metadata to Firestore with TTL
-        now = datetime.utcnow()
-        expire_at = now + timedelta(hours=16)  # TTL set to 16 hours from now 
+    if not cloudlab_uuid:
+        cloudlab_uuid = "unknown"
 
-        experiment_data = {
-            'name': params['name'],      # experiment name
-            'uuid': cloudlab_uuid,       # CloudLab UUID
-            'project': params['proj'],
-            'status': 'started',
-            'created_at': now,           # timestamp of creation (UTC)
-            'expireAt': expire_at        # new TTL field
-        }
-        db.collection('experiments').document(params['name']).set(experiment_data)
-        app.logger.info(f"Experiment '{params['name']}' (uuid='{cloudlab_uuid}') saved to Firestore with expireAt={expire_at}.")
+    # 6. Save experiment metadata to Firestore with TTL
+    now = datetime.utcnow()
+    expire_at = now + timedelta(hours=16)  # TTL set to 16 hours from now 
 
-    else:
-        app.logger.info("Experiment creation failed on CloudLab. No VLAN collection to rollback.")
+    experiment_data = {
+        'name': params['name'],      # experiment name
+        'uuid': cloudlab_uuid,       # CloudLab UUID
+        'project': params['proj'],
+        'status': 'started',
+        'created_at': now,           # timestamp of creation (UTC)
+        'expireAt': expire_at        # new TTL field
+    }
+    db.collection('experiments').document(params['name']).set(experiment_data)
+    app.logger.info(f"Experiment '{params['name']}' (uuid='{cloudlab_uuid}') saved to Firestore with expireAt={expire_at}.")
 
     return ERRORMESSAGES.get(exitval, ERRORMESSAGES[RESPONSE_ERROR])
 
@@ -244,12 +254,26 @@ def experimentStatus():
     app.logger.info(f'Server configuration: {config}')
     server = xmlrpc.EmulabXMLRPC(config)
 
-    (exitval, response) = api.experimentStatus(server, params).apply()
-    app.logger.info(f'ExitVal: {exitval}')
-    app.logger.info(f'Response: {response}')
+    max_retries = 5
+    retry_delay = 2  # seconds
 
-    return (str(response.output), ERRORMESSAGES[exitval][1]) 
+    for attempt in range(1, max_retries + 1):
+        (exitval, response) = api.experimentStatus(server, params).apply()
+        app.logger.info(f"Attempt {attempt}/{max_retries}, exitval={exitval}, response={response}")
 
+        # If the call succeeded and we have a response object with .output, return immediately.
+        if response is not None and hasattr(response, 'output'):
+            return (str(response.output), ERRORMESSAGES[exitval][1])
+
+        # Otherwise, log a warning and retry after a short delay.
+        app.logger.warning(
+            f"experimentStatus attempt {attempt} did not return a valid response. "
+            f"Retrying in {retry_delay} second(s)..."
+        )
+        time.sleep(retry_delay)
+
+    # If we get here, all attempts failed to produce a valid response
+    return ("No valid status after multiple retries", 500)
 
 # -------------------------------------------------------------------
 # API: Terminate Experiment (DELETE /experiment)
@@ -328,7 +352,7 @@ def listExperiments():
             end = filter_name_startswith + u'\uf8ff'
             query = query.where('name', '>=', start).where('name', '<=', end)
 
-        # Apply uuid_startswith filter if provided
+        # Apply uuid_startswith filter if providedw
         if filter_uuid_startswith:
             start = filter_uuid_startswith
             end = filter_uuid_startswith + u'\uf8ff'
