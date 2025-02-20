@@ -11,7 +11,8 @@ import (
 	"strings"
 )
 
-const HostURL = "http://localhost:8080/"
+// const HostURL = "http://localhost:8080/"
+const HostURL = "http://128.105.144.213:8080/"
 
 const experimentPath = "experiment"
 
