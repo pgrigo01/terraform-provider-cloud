@@ -2,8 +2,9 @@ terraform {
   required_providers {
     cloudlab = {
       source  = "pgrigo01/cloudlab"
-      version = "2.4.3" //to host "http://128.105.144.213:8080/"
+      #version = "2.4.3" //to host "http://128.105.144.213:8080/"
       #version = "2.4.2" //to locallhost 
+      version = "2.5.1"
     }
   }
 }

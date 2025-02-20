@@ -12,7 +12,8 @@ import (
 )
 
 // const HostURL = "http://localhost:8080/"
-const HostURL = "http://128.105.144.213:8080/"
+// const HostURL = "http://128.105.144.213:8080/"
+const HostURL = "http://155.98.36.12:8080/"
 
 const experimentPath = "experiment"
 
