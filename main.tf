@@ -2,7 +2,8 @@ terraform {
   required_providers {
     cloudlab = {
       source  = "pgrigo01/cloudlab"
-      version = "2.4.3"
+      version = "2.4.3" //to host "http://128.105.144.213:8080/"
+      #version = "2.4.2" //to locallhost 
     }
   }
 }
@@ -33,7 +34,7 @@ resource "cloudlab_vlan" "my_cloudlab_vlan" {
 # }
 
 # resource "cloudlab_vm" "my_vm3" {
-#   name         = "vmtest7"
+#   name         = "vmtest8"
 #   routable_ip  = true
 #   image        = "UBUNTU 20.04"
 #   aggregate    = "Any"
