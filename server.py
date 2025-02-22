@@ -444,5 +444,13 @@ threading.Thread(target=schedule_deletion, daemon=True).start()
 # Main entry point
 # -------------------------------------------------------------------
 if __name__ == '__main__':
+    import subprocess
+
+    # Run dns.py once before starting the Flask server
+    result = subprocess.run(["python3", "./dns.py"], capture_output=True, text=True)
+    print(result.stdout)
+    if result.returncode != 0:
+        print("dns.py encountered an error")
+
     port = 8080
     app.run(debug=True, port=port, host='0.0.0.0')
