@@ -13,7 +13,9 @@ import (
 
 //const HostURL = "http://localhost:8080/"
 
-const HostURL = "http://155.98.36.7:8080/"
+//const HostURL = "http://155.98.36.7:8080/"
+
+const HostURL = "http://terraform-cloudlab.duckdns.org:8080/"
 
 const experimentPath = "experiment"
 

@@ -2,12 +2,12 @@ terraform {
   required_providers {
     cloudlab = {
       source  = "pgrigo01/cloudlab"
-      version = "2.2.1" 
+      version = "4.0.0" 
     }
   }
 }
 
-#version = "2.4.2" //for locallhost 
+#version = "2.2.0" //for locallhost 
 
 # CloudLab provider configuration, specifying the path to the credentials file and API endpoint
 provider "cloudlab" {
@@ -37,10 +37,10 @@ resource "cloudlab_vlan" "my_cloudlab_vlan" {
 # }
 
 
-resource "cloudlab_vm" "my_vm4" {
-  name         = "vmtest9"
-  routable_ip  = true
-  image        = "UBUNTU 20.04"
-  aggregate    = "Any"
-}
+# resource "cloudlab_vm" "my_vm4" {
+#   name         = "vmtest9"
+#   routable_ip  = true
+#   image        = "UBUNTU 20.04"
+#   aggregate    = "Any"
+# }
 
