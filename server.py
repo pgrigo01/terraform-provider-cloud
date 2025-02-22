@@ -3,17 +3,16 @@ import re
 import time
 from io import BytesIO
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import tempfile
+import sqlite3
 
 from flask import Flask, request, jsonify, Request
 import CloudLabAPI.src.emulab_sslxmlrpc.client.api as api
 import CloudLabAPI.src.emulab_sslxmlrpc.xmlrpc as xmlrpc
 
-from db import db  # Firestore client
-
 app = Flask(__name__)
-app.logger.setLevel('INFO')  
+app.logger.setLevel('INFO')
 
 # --------------------------
 # Error / Status Constants
@@ -44,6 +43,24 @@ ERRORMESSAGES = {
     RESPONSE_ALREADYEXISTS: ('Already Exists', 400)
 }
 
+# -------------------------------------------------------------------
+# Initialize local SQLite database
+# -------------------------------------------------------------------
+connection = sqlite3.connect("experiments.db", check_same_thread=False)
+cursor = connection.cursor()
+
+# Create a table that matches the fields you used in Firestore
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS experiments (
+    name TEXT PRIMARY KEY,
+    uuid TEXT,
+    project TEXT,
+    status TEXT,
+    created_at TEXT,
+    expireAt TEXT
+)
+""")
+connection.commit()
 
 # -------------------------------------------------------------------
 # Helper: Check if a string is valid JSON
@@ -55,20 +72,17 @@ def is_valid_json(json_str):
     except json.JSONDecodeError:
         return False
 
-
 # -------------------------------------------------------------------
 # Helper: Convert JSON string to dict
 # -------------------------------------------------------------------
 def json_to_dict(json_string):
     return json.loads(json_string)
 
-
 # -------------------------------------------------------------------
 # Helper: Convert dict to JSON string
 # -------------------------------------------------------------------
 def dict_to_json(dictionary):
     return json.dumps(dictionary)
-
 
 # -------------------------------------------------------------------
 # parseArgs: Parse the form-data for file (certificate) + params
@@ -107,7 +121,6 @@ def parseArgs(req: Request):
                 # If there's a nested JSON string for sharedVlans, parse that too
                 if "sharedVlans" in value_dict:
                     if isinstance(value_dict["sharedVlans"], str):
-                        # Convert that JSON string to a dict
                         value_dict["sharedVlans"] = json_to_dict(value_dict["sharedVlans"])
                 params[key] = value_dict
             else:
@@ -115,7 +128,6 @@ def parseArgs(req: Request):
 
     app.logger.debug(f"parseArgs -> file={temp_file_path}, params={params}")
     return (temp_file_path, params), ("", 200)
-
 
 # -------------------------------------------------------------------
 # Helper: Example function to parse UUID from any given string
@@ -130,12 +142,8 @@ def parse_uuid_from_response(response_string: str) -> str:
         return match.group(1)
     return ""
 
-
 # -------------------------------------------------------------------
 # API: Start the experiment (POST /experiment)
-# - Creates doc in Firestore with 'uuid': 'unknown'
-# - Immediately calls experimentStatus to fetch real UUID
-# - Updates Firestore doc with the correct UUID
 # -------------------------------------------------------------------
 @app.route('/experiment', methods=['POST'])
 def startExperiment():
@@ -191,7 +199,7 @@ def startExperiment():
     cloudlab_uuid = parse_uuid_from_response(str(response))
     app.logger.info(f"Parsed UUID from startExperiment: '{cloudlab_uuid}'")
 
-    # If parsing fails, call experimentStatus to get the correct UUID 
+    # If parsing fails, call experimentStatus to get the correct UUID
     if not cloudlab_uuid:
         app.logger.info("Could not parse UUID from startExperiment. Checking experimentStatus for the real UUID...")
         status_params = {
@@ -210,23 +218,38 @@ def startExperiment():
     if not cloudlab_uuid:
         cloudlab_uuid = "unknown"
 
-    # 6. Save experiment metadata to Firestore with TTL
-    now = datetime.utcnow()
+    # 6. Save experiment metadata to SQLite with TTL
+    now = datetime.now(timezone.utc)       # <--- Timezone-aware
     expire_at = now + timedelta(hours=16)  # TTL set to 16 hours from now 
 
     experiment_data = {
-        'name': params['name'],      # experiment name
-        'uuid': cloudlab_uuid,       # CloudLab UUID
+        'name': params['name'],       # experiment name
+        'uuid': cloudlab_uuid,        # CloudLab UUID
         'project': params['proj'],
         'status': 'started',
-        'created_at': now,           # timestamp of creation (UTC)
-        'expireAt': expire_at        # new TTL field
+        'created_at': now.isoformat(),
+        'expireAt': expire_at.isoformat()
     }
-    db.collection('experiments').document(params['name']).set(experiment_data)
-    app.logger.info(f"Experiment '{params['name']}' (uuid='{cloudlab_uuid}') saved to Firestore with expireAt={expire_at}.")
+
+    # Insert (or replace) into the local SQLite table
+    cursor.execute("""
+        INSERT OR REPLACE INTO experiments (name, uuid, project, status, created_at, expireAt)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (
+        experiment_data['name'],
+        experiment_data['uuid'],
+        experiment_data['project'],
+        experiment_data['status'],
+        experiment_data['created_at'],
+        experiment_data['expireAt']
+    ))
+    connection.commit()
+
+    app.logger.info(
+        f"Experiment '{params['name']}' (uuid='{cloudlab_uuid}') saved to SQLite with expireAt={expire_at}."
+    )
 
     return ERRORMESSAGES.get(exitval, ERRORMESSAGES[RESPONSE_ERROR])
-
 
 # -------------------------------------------------------------------
 # API: experimentStatus (GET /experiment)
@@ -261,18 +284,15 @@ def experimentStatus():
         (exitval, response) = api.experimentStatus(server, params).apply()
         app.logger.info(f"Attempt {attempt}/{max_retries}, exitval={exitval}, response={response}")
 
-        # If the call succeeded and we have a response object with .output, return immediately.
         if response is not None and hasattr(response, 'output'):
             return (str(response.output), ERRORMESSAGES[exitval][1])
 
-        # Otherwise, log a warning and retry after a short delay.
         app.logger.warning(
             f"experimentStatus attempt {attempt} did not return a valid response. "
             f"Retrying in {retry_delay} second(s)..."
         )
         time.sleep(retry_delay)
 
-    # If we get here, all attempts failed to produce a valid response
     return ("No valid status after multiple retries", 500)
 
 # -------------------------------------------------------------------
@@ -298,27 +318,36 @@ def terminateExperiment():
     app.logger.info(f'Server configuration: {config}')
     server = xmlrpc.EmulabXMLRPC(config)
 
-    # Terminate on CloudLab
     (exitval, response) = api.terminateExperiment(server, params).apply()
     app.logger.info(f"terminateExperiment exitval={exitval}, response={response}")
 
     if exitval == 0:
+        # If the user provided 'experiment' or 'name' as the "identifier" to delete
         uuid_to_delete = params.get('experiment') or params.get('name', '')
-        app.logger.info(f"CloudLab termination successful; cleaning up doc(s) for uuid='{uuid_to_delete}' in Firestore.")
+        app.logger.info(
+            f"CloudLab termination successful; cleaning up row(s) for uuid='{uuid_to_delete}' in SQLite."
+        )
 
-        exp_docs = db.collection('experiments').where('uuid', '==', uuid_to_delete).stream()
-        exp_list = list(exp_docs)
-        app.logger.info(f"Found {len(exp_list)} experiment doc(s) with uuid='{uuid_to_delete}'. Deleting...")
-        for doc in exp_list:
-            doc_id = doc.id
-            doc.reference.delete()
-            app.logger.info(f"Deleted experiment doc '{doc_id}' in Firestore.")
+        # In Firestore logic, we used to query for documents where 'uuid' == ...
+        # We replicate that approach here in SQLite.
+        cursor.execute("SELECT name FROM experiments WHERE uuid = ?", (uuid_to_delete,))
+        rows = cursor.fetchall()
+
+        if rows:
+            for row in rows:
+                exp_name = row[0]
+                cursor.execute("DELETE FROM experiments WHERE name = ?", (exp_name,))
+            connection.commit()
+            app.logger.info(
+                f"Deleted {len(rows)} experiment record(s) from SQLite where uuid='{uuid_to_delete}'."
+            )
+        else:
+            app.logger.info(f"No experiment record found in SQLite for uuid='{uuid_to_delete}'.")
 
         return ERRORMESSAGES[exitval]
     else:
-        app.logger.error("Failed to terminate on CloudLab; skipping Firestore cleanup.")
+        app.logger.error("Failed to terminate on CloudLab; skipping local SQLite cleanup.")
         return ERRORMESSAGES.get(exitval, ERRORMESSAGES[RESPONSE_ERROR])
-
 
 # -------------------------------------------------------------------
 # Listing all experiments (GET /experiments)
@@ -329,58 +358,79 @@ def listExperiments():
         filter_name = request.args.get('name')
         filter_project = request.args.get('proj')
         filter_name_startswith = request.args.get('name_startswith')
-        experiments_ref = db.collection('experiments')
         filter_uuid = request.args.get('uuid')
         filter_uuid_startswith = request.args.get('uuid_startswith')
-        query = experiments_ref
 
-        # Apply exact name filter if provided
+        # Build a dynamic WHERE clause based on query parameters
+        query = "SELECT name, uuid, project, status, created_at, expireAt FROM experiments WHERE 1=1"
+        q_params = []
+
         if filter_name:
-            query = query.where('name', '==', filter_name)
-
-        # Apply project filter if provided
+            query += " AND name = ?"
+            q_params.append(filter_name)
         if filter_project:
-            query = query.where('project', '==', filter_project)
-        
-        # Apply exact uuid filter if provided
+            query += " AND project = ?"
+            q_params.append(filter_project)
         if filter_uuid:
-            query = query.where('uuid', '==', filter_uuid)
-
-        # Apply name_startswith filter if provided
+            query += " AND uuid = ?"
+            q_params.append(filter_uuid)
         if filter_name_startswith:
-            start = filter_name_startswith
-            end = filter_name_startswith + u'\uf8ff'
-            query = query.where('name', '>=', start).where('name', '<=', end)
-
-        # Apply uuid_startswith filter if providedw
+            query += " AND name LIKE ?"
+            q_params.append(filter_name_startswith + "%")
         if filter_uuid_startswith:
-            start = filter_uuid_startswith
-            end = filter_uuid_startswith + u'\uf8ff'
-            query = query.where('uuid', '>=', start).where('uuid', '<=', end)
-        
-        experiments = query.stream()
-        experiments_list = [exp.to_dict() for exp in experiments]
+            query += " AND uuid LIKE ?"
+            q_params.append(filter_uuid_startswith + "%")
+
+        cursor.execute(query, q_params)
+        rows = cursor.fetchall()
+
+        experiments_list = []
+        for row in rows:
+            # row = (name, uuid, project, status, created_at, expireAt)
+            experiments_list.append({
+                'name': row[0],
+                'uuid': row[1],
+                'project': row[2],
+                'status': row[3],
+                'created_at': row[4],
+                'expireAt': row[5]
+            })
+
         return jsonify(experiments_list), 200
 
     except Exception as e:
         app.logger.error(f"Error listing experiments: {e}")
         return jsonify({'error': str(e)}), 500
 
-
 # -------------------------------------------------------------------
 # Background Task: Delete expired documents every minute
 # -------------------------------------------------------------------
 def delete_expired_documents():
     with app.app_context():
-        now = datetime.utcnow()
-        expired_docs = db.collection('experiments').where('expireAt', '<=', now).stream()
+        now = datetime.now(timezone.utc)  # <--- Timezone-aware current time
+        cursor.execute("SELECT name, expireAt FROM experiments")
+        rows = cursor.fetchall()
         deleted_count = 0
-        for doc in expired_docs:
-            doc.reference.delete()
-            deleted_count += 1
-            app.logger.info(f"Deleted expired document: {doc.id}")
-        if deleted_count:
-            app.logger.info(f"Total expired documents deleted: {deleted_count}")
+
+        for row in rows:
+            exp_name = row[0]
+            expire_at_str = row[1]
+
+            # If stored as ISO-8601 string, parse it back to a datetime
+            try:
+                expire_dt = datetime.fromisoformat(expire_at_str)
+            except ValueError:
+                # If invalid format, skip
+                continue
+
+            # Delete if expired
+            if expire_dt <= now:
+                cursor.execute("DELETE FROM experiments WHERE name = ?", (exp_name,))
+                deleted_count += 1
+
+        if deleted_count > 0:
+            connection.commit()
+            app.logger.info(f"Deleted {deleted_count} expired record(s) from SQLite.")
 
 def schedule_deletion():
     while True:
@@ -389,7 +439,6 @@ def schedule_deletion():
 
 # Start the background deletion thread
 threading.Thread(target=schedule_deletion, daemon=True).start()
-
 
 # -------------------------------------------------------------------
 # Main entry point
