@@ -2,12 +2,12 @@ terraform {
   required_providers {
     cloudlab = {
       source  = "pgrigo01/cloudlab"
-      version = "2.5.5" 
+      version = "2.2.1" 
     }
   }
 }
 
-#version = "2.4.2" //for locallhost 
+#version = "2.2.0" //for locallhost 
 
 # CloudLab provider configuration, specifying the path to the credentials file and API endpoint
 provider "cloudlab" {
