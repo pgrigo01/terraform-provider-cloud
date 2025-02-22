@@ -3,6 +3,7 @@
 # Activate the virtual environment
 sudo apt update
 sudo apt install python3-pip
+pip install flask
 
 source myenv/bin/activate
 sudo apt install python3-pip
