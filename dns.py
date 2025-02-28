@@ -4,14 +4,12 @@ import requests
 # ------------------------------------------------------------------------------
 # CONFIGURATION
 # ------------------------------------------------------------------------------
-DOMAIN = "terraform-cloudlab"  # Your DuckDNS subdomain (no ".duckdns.org")
-TOKEN = "956737ca-e761-4fe8-a713-ebbb2a813339"   # Replace with your actual DuckDNS token
+DOMAIN = "terraform-cloudlab"  # DuckDNS subdomain 
+TOKEN = "956737ca-e761-4fe8-a713-ebbb2a813339"   # Duck DNS token
 
-# Endpoint to detect your public IP
+# Endpoint to detect public IP
 PUBLIC_IP_ENDPOINT = "https://ifconfig.me"
-# Alternative endpoints:
-#   "https://ipinfo.io/ip"
-#   "http://checkip.amazonaws.com"
+
 
 # ------------------------------------------------------------------------------
 # FUNCTION: get_public_ip
