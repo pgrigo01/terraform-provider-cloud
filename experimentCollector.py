@@ -1,6 +1,5 @@
 import os
 import getpass
-import time
 import pandas as pd
 import tempfile
 from selenium import webdriver
@@ -10,30 +9,10 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 
-# -------------------------------
-# Setup Chrome options with a unique user data directory
-# -------------------------------
-options = webdriver.ChromeOptions()
-# Create a temporary directory for user data to avoid conflicts
-temp_user_data = tempfile.mkdtemp()
-options.add_argument(f"--user-data-dir={temp_user_data}")
 
-# These options help with headless/server environments
-options.add_argument("--no-sandbox")
-options.add_argument("--disable-dev-shm-usage")
-#options.add_argument("--headless")  # Remove if you need to see the browser
-options.add_argument("--disable-gpu")
-
-# Initialize the ChromeDriver service using webdriver_manager
-service = Service(ChromeDriverManager().install())
-driver = webdriver.Chrome(service=service, options=options)
-
-# Open the CloudLab login page.
-driver.get("https://www.cloudlab.us/login.php")
-wait = WebDriverWait(driver, 10)
 
 # -------------------------------
-# Retrieve Credentials
+# Retrieve Credentials First
 # -------------------------------
 USERNAME = ""
 PASSWORD = ""
@@ -44,15 +23,34 @@ if os.path.exists("credentials.txt"):
         USERNAME = lines[0].strip()  # First line: username
         PASSWORD = lines[1].strip()  # Second line: password
 else:
-    while USERNAME == "" or PASSWORD == "":
+    while not USERNAME or not PASSWORD:
         USERNAME = input("Enter your username: ")
         PASSWORD = getpass.getpass("Enter your password: ")
 
 # -------------------------------
-# Main Script: Logging In and Data Extraction
+# Setup ChromeDriver after credentials are ready
 # -------------------------------
+options = webdriver.ChromeOptions()
+# Create a temporary directory for user data to avoid conflicts
+temp_user_data = tempfile.mkdtemp()
+options.add_argument(f"--user-data-dir={temp_user_data}")
+# Options for headless/server environments
+options.add_argument("--no-sandbox")
+options.add_argument("--disable-dev-shm-usage")
+options.add_argument("--headless")  # Remove this line if you need to see the browser
+options.add_argument("--disable-gpu")
+
+service = Service(ChromeDriverManager().install())
+driver = webdriver.Chrome(service=service, options=options)
+
+# -------------------------------
+# Load the CloudLab login page after credentials are obtained
+# -------------------------------
+driver.get("https://www.cloudlab.us/login.php")
+wait = WebDriverWait(driver, 10)
+
 try:
-    # 1) Log in to CloudLab
+    # 1) Log in to CloudLab using the provided credentials.
     username_field = wait.until(EC.presence_of_element_located((By.NAME, "uid")))
     password_field = wait.until(EC.presence_of_element_located((By.NAME, "password")))
     username_field.send_keys(USERNAME)
@@ -66,67 +64,53 @@ try:
     experiments_tab.click()
     print("Navigated to Experiments tab")
 
-    # 3) Wait for the experiments table to load.
-    time.sleep(3)
-    experiment_table = wait.until(EC.presence_of_element_located((By.TAG_NAME, "table")))
-
-    # 4) Extract table rows and header information.
+    # 3) Wait for the experiments table to load using an explicit wait.
+    experiment_table = wait.until(EC.visibility_of_element_located((By.TAG_NAME, "table")))
     rows = experiment_table.find_elements(By.TAG_NAME, "tr")
     headers = [th.text for th in rows[0].find_elements(By.TAG_NAME, "th")]
     print("Extracted headers:", headers)
 
-    # 5) Gather data from each row of the table.
+    # 4) Combine data extraction and search for the "management-node" row.
     experiments_data = []
+    management_node_link = None
+
     for row in rows[1:]:
         cols = row.find_elements(By.TAG_NAME, "td")
-        experiments_data.append([c.text for c in cols])
+        if cols:
+            row_data = [c.text for c in cols]
+            experiments_data.append(row_data)
+            if row_data[0].strip().lower() == "management-node" and management_node_link is None:
+                try:
+                    management_node_link = cols[0].find_element(By.TAG_NAME, "a")
+                except Exception:
+                    management_node_link = row
 
-    # 6) Convert the data into a DataFrame.
+    # 5) Convert the data into a DataFrame and filter by creator if applicable.
     df = pd.DataFrame(experiments_data, columns=headers)
-
-    # 7) Filter rows by creator if possible.
     if "Creator" in df.columns:
         df = df[df["Creator"] == USERNAME]
     else:
         print("No 'Creator' column found; skipping user-based filtering.")
 
-    # 8) Save the DataFrame to a CSV file.
+    # 6) Save the DataFrame to a CSV file.
     df.to_csv("cloudlab_experiments.csv", index=False)
     print("Data saved to 'cloudlab_experiments.csv'")
 
-    # 9) Locate and click the experiment named "management-node"
-    rows = experiment_table.find_elements(By.TAG_NAME, "tr")
-    management_node_link = None
-    for row in rows[1:]:
-        cols = row.find_elements(By.TAG_NAME, "td")
-        if len(cols) > 0:
-            name_text = cols[0].text.strip().lower()
-            if name_text == "management-node":
-                try:
-                    management_node_link = cols[0].find_element(By.TAG_NAME, "a")
-                except Exception:
-                    management_node_link = row
-                break
-
+    # 7) Locate and click the experiment named "management-node"
     if management_node_link:
         management_node_link.click()
         print("Clicked on 'management-node' experiment. Navigating to details page...")
 
-        try:
-            expiration_element = wait.until(
-                EC.presence_of_element_located((By.ID, "quickvm_expires"))
-            )
-            WebDriverWait(driver, 10).until(
-                lambda d: expiration_element.text.strip() != ""
-            )
-            expiration_text = expiration_element.text.strip()
-            print("Expiration text found:", expiration_text)
+        # 8) Wait until the expiration element has non-empty text.
+        expiration_element = wait.until(
+            lambda d: d.find_element(By.ID, "quickvm_expires") if d.find_element(By.ID, "quickvm_expires").text.strip() != "" else False
+        )
+        expiration_text = expiration_element.text.strip()
+        print("Expiration text found:", expiration_text)
 
-            with open("managementNodeDuration.txt", "w") as f:
-                f.write(expiration_text + "\n")
-            print("Saved management node expiration to 'managementNodeDuration.txt'")
-        except Exception as ex:
-            print("Could not locate the expiration element or text is empty:", ex)
+        with open("managementNodeDuration.txt", "w") as f:
+            f.write(expiration_text + "\n")
+        print("Saved management node expiration to 'managementNodeDuration.txt'")
     else:
         print("No row found with name 'management-node'.")
 
@@ -134,5 +118,4 @@ except Exception as e:
     print("Error:", e)
 
 finally:
-    time.sleep(5)
     driver.quit()

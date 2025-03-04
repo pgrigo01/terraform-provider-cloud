@@ -318,36 +318,47 @@ def terminateExperiment():
     app.logger.info(f'Server configuration: {config}')
     server = xmlrpc.EmulabXMLRPC(config)
 
-    (exitval, response) = api.terminateExperiment(server, params).apply()
-    app.logger.info(f"terminateExperiment exitval={exitval}, response={response}")
-
-    if exitval == 0:
-        # If the user provided 'experiment' or 'name' as the "identifier" to delete
-        uuid_to_delete = params.get('experiment') or params.get('name', '')
+    # Retry logic similar to experimentStatus
+    max_retries = 5
+    retry_delay = 2  # seconds
+    for attempt in range(1, max_retries + 1):
+        (exitval, response) = api.terminateExperiment(server, params).apply()
         app.logger.info(
-            f"CloudLab termination successful; cleaning up row(s) for uuid='{uuid_to_delete}' in SQLite."
+            f"terminateExperiment attempt {attempt}/{max_retries}: exitval={exitval}, response={response}"
         )
-
-        # In Firestore logic, we used to query for documents where 'uuid' == ...
-        # We replicate that approach here in SQLite.
-        cursor.execute("SELECT name FROM experiments WHERE uuid = ?", (uuid_to_delete,))
-        rows = cursor.fetchall()
-
-        if rows:
-            for row in rows:
-                exp_name = row[0]
-                cursor.execute("DELETE FROM experiments WHERE name = ?", (exp_name,))
-            connection.commit()
-            app.logger.info(
-                f"Deleted {len(rows)} experiment record(s) from SQLite where uuid='{uuid_to_delete}'."
-            )
+        if exitval == 0:
+            break
         else:
-            app.logger.info(f"No experiment record found in SQLite for uuid='{uuid_to_delete}'.")
+            app.logger.warning(
+                f"terminateExperiment attempt {attempt} failed with exitval={exitval}. Retrying in {retry_delay} seconds..."
+            )
+            time.sleep(retry_delay)
 
-        return ERRORMESSAGES[exitval]
-    else:
-        app.logger.error("Failed to terminate on CloudLab; skipping local SQLite cleanup.")
+    # If all attempts failed, return an error response
+    if exitval != 0:
+        app.logger.error("All attempts to terminate experiment failed.")
         return ERRORMESSAGES.get(exitval, ERRORMESSAGES[RESPONSE_ERROR])
+
+    # Clean up local SQLite records on successful termination
+    uuid_to_delete = params.get('experiment') or params.get('name', '')
+    app.logger.info(
+        f"CloudLab termination successful; cleaning up row(s) for uuid='{uuid_to_delete}' in SQLite."
+    )
+    cursor.execute("SELECT name FROM experiments WHERE uuid = ?", (uuid_to_delete,))
+    rows = cursor.fetchall()
+
+    if rows:
+        for row in rows:
+            exp_name = row[0]
+            cursor.execute("DELETE FROM experiments WHERE name = ?", (exp_name,))
+        connection.commit()
+        app.logger.info(
+            f"Deleted {len(rows)} experiment record(s) from SQLite where uuid='{uuid_to_delete}'."
+        )
+    else:
+        app.logger.info(f"No experiment record found in SQLite for uuid='{uuid_to_delete}'.")
+
+    return ERRORMESSAGES[exitval]
 
 # -------------------------------------------------------------------
 # Listing all experiments (GET /experiments)

@@ -6,19 +6,19 @@ import threading
 from datetime import datetime, timedelta, timezone
 import tempfile
 import sqlite3
-import subprocess
+import getpass
+import atexit
+import signal
 
 from flask import Flask, request, jsonify, Request
 import CloudLabAPI.src.emulab_sslxmlrpc.client.api as api
 import CloudLabAPI.src.emulab_sslxmlrpc.xmlrpc as xmlrpc
 
+# Import the refactored experiment collector
+import experimentCollector
+
 app = Flask(__name__)
 app.logger.setLevel('INFO')
-
-# Global variables for management node and last experiment
-last_experiment = None
-management_node_info = None
-GLOBAL_CERTIFICATE = "cloudlab-decrypted.pem"  # Update with your actual certificate path
 
 # --------------------------
 # Error / Status Constants
@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS experiments (
 connection.commit()
 
 # -------------------------------------------------------------------
-# Helper: Check if a string is valid JSON
+# Helper functions for JSON handling
 # -------------------------------------------------------------------
 def is_valid_json(json_str):
     try:
@@ -77,15 +77,9 @@ def is_valid_json(json_str):
     except json.JSONDecodeError:
         return False
 
-# -------------------------------------------------------------------
-# Helper: Convert JSON string to dict
-# -------------------------------------------------------------------
 def json_to_dict(json_string):
     return json.loads(json_string)
 
-# -------------------------------------------------------------------
-# Helper: Convert dict to JSON string
-# -------------------------------------------------------------------
 def dict_to_json(dictionary):
     return json.dumps(dictionary)
 
@@ -126,15 +120,6 @@ def parseArgs(req: Request):
     return (temp_file_path, params), ("", 200)
 
 # -------------------------------------------------------------------
-# Helper: Parse UUID from response string
-# -------------------------------------------------------------------
-def parse_uuid_from_response(response_string: str) -> str:
-    match = re.search(r"UUID:\s+([a-z0-9-]+)", response_string, re.IGNORECASE)
-    if match:
-        return match.group(1)
-    return ""
-
-# -------------------------------------------------------------------
 # API: Start the experiment (POST /experiment)
 # -------------------------------------------------------------------
 @app.route('/experiment', methods=['POST'])
@@ -164,7 +149,7 @@ def startExperiment():
     app.logger.info(f'Experiment parameters: {params}')
 
     max_retries = 5
-    retry_delay = 1.5
+    retry_delay = 3
     for attempt in range(1, max_retries + 1):
         (exitval, response) = api.startExperiment(server, params).apply()
         app.logger.info(f"startExperiment attempt {attempt}/{max_retries}: exitval={exitval}, response={response}")
@@ -229,7 +214,14 @@ def startExperiment():
     app.logger.info(
         f"Experiment '{params['name']}' (uuid='{cloudlab_uuid}') saved to SQLite with expireAt={expire_at}."
     )
+
     return ERRORMESSAGES.get(exitval, ERRORMESSAGES[RESPONSE_ERROR])
+
+def parse_uuid_from_response(response_string: str) -> str:
+    match = re.search(r"UUID:\s+([a-z0-9-]+)", response_string, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    return ""
 
 # -------------------------------------------------------------------
 # API: experimentStatus (GET /experiment)
@@ -280,7 +272,6 @@ def experimentStatus():
 # -------------------------------------------------------------------
 @app.route('/experiment', methods=['DELETE'])
 def terminateExperiment():
-    global last_experiment
     app.logger.info("terminateExperiment")
     args, err = parseArgs(request)
     errVal, errCode = err
@@ -304,28 +295,23 @@ def terminateExperiment():
 
     if exitval == 0:
         uuid_to_delete = params.get('experiment') or params.get('name', '')
-        cursor.execute("SELECT name, created_at FROM experiments WHERE uuid = ?", (uuid_to_delete,))
-        row = cursor.fetchone()
-        if row:
-            exp_name, created_at = row
-            now = datetime.now(timezone.utc)
-            duration = now - datetime.fromisoformat(created_at)
-            last_experiment = {
-                'name': exp_name,
-                'created_at': created_at,
-                'terminated_at': now.isoformat(),
-                'duration': duration.total_seconds()
-            }
+        app.logger.info(
+            f"CloudLab termination successful; cleaning up row(s) for uuid='{uuid_to_delete}' in SQLite."
+        )
         cursor.execute("SELECT name FROM experiments WHERE uuid = ?", (uuid_to_delete,))
         rows = cursor.fetchall()
+
         if rows:
             for row in rows:
                 exp_name = row[0]
                 cursor.execute("DELETE FROM experiments WHERE name = ?", (exp_name,))
             connection.commit()
-            app.logger.info(f"Deleted experiment record(s) for uuid='{uuid_to_delete}'.")
+            app.logger.info(
+                f"Deleted {len(rows)} experiment record(s) from SQLite where uuid='{uuid_to_delete}'."
+            )
         else:
-            app.logger.info(f"No experiment record found for uuid='{uuid_to_delete}'.")
+            app.logger.info(f"No experiment record found in SQLite for uuid='{uuid_to_delete}'.")
+
         return ERRORMESSAGES[exitval]
     else:
         app.logger.error("Failed to terminate on CloudLab; skipping local SQLite cleanup.")
@@ -395,10 +381,12 @@ def delete_expired_documents():
         for row in rows:
             exp_name = row[0]
             expire_at_str = row[1]
+
             try:
                 expire_dt = datetime.fromisoformat(expire_at_str)
             except ValueError:
                 continue
+
             if expire_dt <= now:
                 cursor.execute("DELETE FROM experiments WHERE name = ?", (exp_name,))
                 deleted_count += 1
@@ -412,137 +400,13 @@ def schedule_deletion():
         delete_expired_documents()
         time.sleep(60)
 
-# -------------------------------------------------------------------
-# Initialize Management Node at Startup
-# -------------------------------------------------------------------
-def initialize_management_node():
-    """
-    At startup, run the terminal command:
-      experimentStatus -j UCY-CS499-DC,management-node
-    Parse the JSON output and store the management node information in the SQLite DB.
-    """
-    cmd = ["experimentStatus", "-j", "UCY-CS499-DC,management-node"]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    
-    if result.returncode != 0:
-        app.logger.error("Failed to run experimentStatus command for management node")
-        return
-
-    try:
-        response = json.loads(result.stdout)
-        mgmt_uuid = response.get("uuid", "")
-        expires_str = response.get("expires", "")
-        if not mgmt_uuid or not expires_str:
-            app.logger.error("Missing uuid or expires field in management node response")
-            return
-
-        # Parse the expires field (e.g., "2025-02-25T03:25:59Z")
-        expire_at = datetime.strptime(expires_str, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-        now = datetime.now(timezone.utc)
-
-        global management_node_info
-        management_node_info = {
-            'name': "management-node",
-            'uuid': mgmt_uuid,
-            'project': "UCY-CS499-DC",
-            'status': response.get("status", "unknown"),
-            'created_at': now.isoformat(),
-            'expireAt': expire_at.isoformat()
-        }
-        
-        cursor.execute("""
-            INSERT OR REPLACE INTO experiments (name, uuid, project, status, created_at, expireAt)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (
-            management_node_info['name'],
-            management_node_info['uuid'],
-            management_node_info['project'],
-            management_node_info['status'],
-            management_node_info['created_at'],
-            management_node_info['expireAt']
-        ))
-        connection.commit()
-        app.logger.info("Management node initialized and stored in DB using terminal command.")
-    except Exception as e:
-        app.logger.error(f"Error processing management node info: {e}")
-
-# -------------------------------------------------------------------
-# Background Task: Monitor and Extend Management Node
-# -------------------------------------------------------------------
-def monitor_management_node():
-    """
-    Background thread that checks if the management node's remaining time is less than one hour.
-    If so, and if the last experiment's duration exceeds the remaining time, extend the management node.
-    """
-    while True:
-        global management_node_info, last_experiment
-        if management_node_info:
-            expire_at = datetime.fromisoformat(management_node_info['expireAt'])
-            now = datetime.now(timezone.utc)
-            time_remaining = expire_at - now
-            app.logger.info(f"Management node time remaining: {time_remaining}")
-            if time_remaining < timedelta(hours=1):
-                if last_experiment:
-                    experiment_duration_hours = float(last_experiment.get('duration', 0)) / 3600.0
-                    remaining_hours = time_remaining.total_seconds() / 3600.0
-                    if experiment_duration_hours > remaining_hours:
-                        extra_hours = experiment_duration_hours - remaining_hours
-                        reason = (
-                            "Extending management node because the last experiment's duration "
-                            f"({experiment_duration_hours:.2f} hours) exceeds the remaining time "
-                            f"({remaining_hours:.2f} hours). This extension is necessary to ensure "
-                            "the continuity of ongoing experiments and to avoid any disruptions. "
-                            "Please approve this extension request to maintain the stability and "
-                            "reliability of the system."
-                        )
-                        app.logger.info(f"Extending management node by {extra_hours:.2f} hours with reason: {reason}")
-                        extend_params = {
-                            'proj': "UCY-CS499-DC",
-                            'experiment': "management-node",
-                            'extra_hours': extra_hours,
-                            'reason': reason
-                        }
-                        config = {
-                            "debug": 0,
-                            "impotent": 0,
-                            "verify": 0,
-                            "certificate": GLOBAL_CERTIFICATE,
-                        }
-                        server = xmlrpc.EmulabXMLRPC(config)
-                        (exitval, response) = api.extendExperiment(server, extend_params).apply()
-                        if exitval == 0:
-                            new_expire_at = expire_at + timedelta(hours=extra_hours)
-                            management_node_info['expireAt'] = new_expire_at.isoformat()
-                            cursor.execute("UPDATE experiments SET expireAt = ? WHERE name = ?",
-                                (management_node_info['expireAt'], "management-node"))
-                            connection.commit()
-                            app.logger.info(
-                                f"Management node extended successfully.\n"
-                                f"Previous expiration time: {expire_at.isoformat()}\n"
-                                f"New expiration time: {new_expire_at.isoformat()}\n"
-                                f"Extended by: {extra_hours:.2f} hours\n"
-                                f"Reason: {reason}"
-                            )
-                        else:
-                            app.logger.error("Failed to extend management node.")
-        time.sleep(300)  # Check every 5 minutes
-# Start background deletion thread
 threading.Thread(target=schedule_deletion, daemon=True).start()
+
 
 # -------------------------------------------------------------------
 # Main entry point
 # -------------------------------------------------------------------
 if __name__ == '__main__':
-    result = subprocess.run(["python3", "./dns.py"], capture_output=True, text=True)
-    print(result.stdout)
-    if result.returncode != 0:
-        print("dns.py encountered an error")
-    
-    # Initialize management node information at startup
-    initialize_management_node()
-    
-    # Start background thread to monitor and extend management node if needed
-    threading.Thread(target=monitor_management_node, daemon=True).start()
-
+ 
     port = 8080
     app.run(debug=True, port=port, host='0.0.0.0')
