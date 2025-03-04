@@ -1,21 +1,26 @@
+import getpass
+import os
 import json
 import re
 import time
-from io import BytesIO
-import threading
-from datetime import datetime, timedelta, timezone
 import tempfile
+import threading
 import sqlite3
-import getpass
-import atexit
-import signal
+from io import BytesIO
+from datetime import datetime, timedelta, timezone
 
+import pandas as pd
 from flask import Flask, request, jsonify, Request
 import CloudLabAPI.src.emulab_sslxmlrpc.client.api as api
 import CloudLabAPI.src.emulab_sslxmlrpc.xmlrpc as xmlrpc
 
-# Import the refactored experiment collector
-import experimentCollector
+# Selenium and related imports for the collector method
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
 
 app = Flask(__name__)
 app.logger.setLevel('INFO')
@@ -68,7 +73,7 @@ CREATE TABLE IF NOT EXISTS experiments (
 connection.commit()
 
 # -------------------------------------------------------------------
-# Helper functions for JSON handling
+# Helper Functions (JSON conversion, parsing, etc.)
 # -------------------------------------------------------------------
 def is_valid_json(json_str):
     try:
@@ -83,25 +88,18 @@ def json_to_dict(json_string):
 def dict_to_json(dictionary):
     return json.dumps(dictionary)
 
-# -------------------------------------------------------------------
-# parseArgs: Parse the form-data for file (certificate) + params
-# -------------------------------------------------------------------
 def parseArgs(req: Request):
     if 'file' not in req.files:
         return (), ("No file provided", 400)
-
     file = req.files['file']
     if file.filename == '':
         return (), ("No file selected", 400)
-
     file_content = BytesIO()
     file.save(file_content)
-
     temp_file = tempfile.NamedTemporaryFile(delete=False)
     temp_file.write(file_content.getvalue())
     temp_file_path = temp_file.name
     temp_file.close()
-
     params = {}
     for key, value in req.form.items():
         if key != 'bindings':
@@ -115,26 +113,29 @@ def parseArgs(req: Request):
                 params[key] = value_dict
             else:
                 return (), ("Invalid bindings json", 400)
-
     app.logger.debug(f"parseArgs -> file={temp_file_path}, params={params}")
     return (temp_file_path, params), ("", 200)
 
+def parse_uuid_from_response(response_string: str) -> str:
+    match = re.search(r"UUID:\s+([a-z0-9-]+)", response_string, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    return ""
+
 # -------------------------------------------------------------------
-# API: Start the experiment (POST /experiment)
+# API Endpoints for Experiment Start/Status/Terminate/List
+# (unchanged from your current implementation)
 # -------------------------------------------------------------------
 @app.route('/experiment', methods=['POST'])
 def startExperiment():
     app.logger.info("startExperiment")
-    app.logger.info('Parsing Arguments')
     args, err = parseArgs(request)
     errVal, errCode = err
     if errCode != 200:
         return err
     file, params = args
-
     if 'proj' not in params or 'profile' not in params:
         return "Project and/or profile param not provided", 400
-
     config = {
         "debug": 0,
         "impotent": 0,
@@ -143,11 +144,9 @@ def startExperiment():
     }
     app.logger.info(f'Server configuration: {config}')
     server = xmlrpc.EmulabXMLRPC(config)
-
     if 'bindings' in params and isinstance(params['bindings'], dict):
         params['bindings'] = dict_to_json(params['bindings'])
     app.logger.info(f'Experiment parameters: {params}')
-
     max_retries = 5
     retry_delay = 3
     for attempt in range(1, max_retries + 1):
@@ -160,14 +159,11 @@ def startExperiment():
                 f"startExperiment attempt {attempt} failed with exitval={exitval}. Retrying in {retry_delay} seconds..."
             )
             time.sleep(retry_delay)
-
     if exitval != 0:
         app.logger.error("All attempts to start experiment failed.")
         return ERRORMESSAGES.get(exitval, ERRORMESSAGES[RESPONSE_ERROR])
-
     cloudlab_uuid = parse_uuid_from_response(str(response))
     app.logger.info(f"Parsed UUID from startExperiment: '{cloudlab_uuid}'")
-
     if not cloudlab_uuid:
         app.logger.info("Could not parse UUID from startExperiment. Checking experimentStatus for the real UUID...")
         status_params = {
@@ -182,13 +178,10 @@ def startExperiment():
         else:
             app.logger.warning("experimentStatus call failed. Storing 'unknown' for UUID.")
             cloudlab_uuid = "unknown"
-
     if not cloudlab_uuid:
         cloudlab_uuid = "unknown"
-
     now = datetime.now(timezone.utc)
     expire_at = now + timedelta(hours=16)
-
     experiment_data = {
         'name': params['name'],
         'uuid': cloudlab_uuid,
@@ -197,7 +190,6 @@ def startExperiment():
         'created_at': now.isoformat(),
         'expireAt': expire_at.isoformat()
     }
-
     cursor.execute("""
         INSERT OR REPLACE INTO experiments (name, uuid, project, status, created_at, expireAt)
         VALUES (?, ?, ?, ?, ?, ?)
@@ -210,22 +202,11 @@ def startExperiment():
         experiment_data['expireAt']
     ))
     connection.commit()
-
     app.logger.info(
         f"Experiment '{params['name']}' (uuid='{cloudlab_uuid}') saved to SQLite with expireAt={expire_at}."
     )
-
     return ERRORMESSAGES.get(exitval, ERRORMESSAGES[RESPONSE_ERROR])
 
-def parse_uuid_from_response(response_string: str) -> str:
-    match = re.search(r"UUID:\s+([a-z0-9-]+)", response_string, re.IGNORECASE)
-    if match:
-        return match.group(1)
-    return ""
-
-# -------------------------------------------------------------------
-# API: experimentStatus (GET /experiment)
-# -------------------------------------------------------------------
 @app.route('/experiment', methods=['GET'])
 def experimentStatus():
     app.logger.info("experimentStatus")
@@ -234,12 +215,9 @@ def experimentStatus():
     if errCode != 200:
         return err
     file, params = args
-
     if 'proj' not in params or 'experiment' not in params:
         return "Project and/or experiment param not provided", 400
-
     params['experiment'] = f"{params['proj']},{params['experiment']}"
-
     config = {
         "debug": 0,
         "impotent": 0,
@@ -248,28 +226,20 @@ def experimentStatus():
     }
     app.logger.info(f'Server configuration: {config}')
     server = xmlrpc.EmulabXMLRPC(config)
-
     max_retries = 5
     retry_delay = 2
-
     for attempt in range(1, max_retries + 1):
         (exitval, response) = api.experimentStatus(server, params).apply()
         app.logger.info(f"Attempt {attempt}/{max_retries}, exitval={exitval}, response={response}")
-
         if response is not None and hasattr(response, 'output'):
             return (str(response.output), ERRORMESSAGES[exitval][1])
-
         app.logger.warning(
             f"experimentStatus attempt {attempt} did not return a valid response. "
             f"Retrying in {retry_delay} second(s)..."
         )
         time.sleep(retry_delay)
-
     return ("No valid status after multiple retries", 500)
 
-# -------------------------------------------------------------------
-# API: Terminate Experiment (DELETE /experiment)
-# -------------------------------------------------------------------
 @app.route('/experiment', methods=['DELETE'])
 def terminateExperiment():
     app.logger.info("terminateExperiment")
@@ -278,9 +248,7 @@ def terminateExperiment():
     if errCode != 200:
         return err
     file, params = args
-
     app.logger.info(f"Received params for termination: {params}")
-
     config = {
         "debug": 0,
         "impotent": 0,
@@ -289,37 +257,41 @@ def terminateExperiment():
     }
     app.logger.info(f'Server configuration: {config}')
     server = xmlrpc.EmulabXMLRPC(config)
-
-    (exitval, response) = api.terminateExperiment(server, params).apply()
-    app.logger.info(f"terminateExperiment exitval={exitval}, response={response}")
-
-    if exitval == 0:
-        uuid_to_delete = params.get('experiment') or params.get('name', '')
+    max_retries = 5
+    retry_delay = 2
+    for attempt in range(1, max_retries + 1):
+        (exitval, response) = api.terminateExperiment(server, params).apply()
         app.logger.info(
-            f"CloudLab termination successful; cleaning up row(s) for uuid='{uuid_to_delete}' in SQLite."
+            f"terminateExperiment attempt {attempt}/{max_retries}: exitval={exitval}, response={response}"
         )
-        cursor.execute("SELECT name FROM experiments WHERE uuid = ?", (uuid_to_delete,))
-        rows = cursor.fetchall()
-
-        if rows:
-            for row in rows:
-                exp_name = row[0]
-                cursor.execute("DELETE FROM experiments WHERE name = ?", (exp_name,))
-            connection.commit()
-            app.logger.info(
-                f"Deleted {len(rows)} experiment record(s) from SQLite where uuid='{uuid_to_delete}'."
-            )
+        if exitval == 0:
+            break
         else:
-            app.logger.info(f"No experiment record found in SQLite for uuid='{uuid_to_delete}'.")
-
-        return ERRORMESSAGES[exitval]
-    else:
-        app.logger.error("Failed to terminate on CloudLab; skipping local SQLite cleanup.")
+            app.logger.warning(
+                f"terminateExperiment attempt {attempt} failed with exitval={exitval}. Retrying in {retry_delay} seconds..."
+            )
+            time.sleep(retry_delay)
+    if exitval != 0:
+        app.logger.error("All attempts to terminate experiment failed.")
         return ERRORMESSAGES.get(exitval, ERRORMESSAGES[RESPONSE_ERROR])
+    uuid_to_delete = params.get('experiment') or params.get('name', '')
+    app.logger.info(
+        f"CloudLab termination successful; cleaning up row(s) for uuid='{uuid_to_delete}' in SQLite."
+    )
+    cursor.execute("SELECT name FROM experiments WHERE uuid = ?", (uuid_to_delete,))
+    rows = cursor.fetchall()
+    if rows:
+        for row in rows:
+            exp_name = row[0]
+            cursor.execute("DELETE FROM experiments WHERE name = ?", (exp_name,))
+        connection.commit()
+        app.logger.info(
+            f"Deleted {len(rows)} experiment record(s) from SQLite where uuid='{uuid_to_delete}'."
+        )
+    else:
+        app.logger.info(f"No experiment record found in SQLite for uuid='{uuid_to_delete}'.")
+    return ERRORMESSAGES[exitval]
 
-# -------------------------------------------------------------------
-# Listing all experiments (GET /experiments)
-# -------------------------------------------------------------------
 @app.route('/experiments', methods=['GET'])
 def listExperiments():
     try:
@@ -328,10 +300,8 @@ def listExperiments():
         filter_name_startswith = request.args.get('name_startswith')
         filter_uuid = request.args.get('uuid')
         filter_uuid_startswith = request.args.get('uuid_startswith')
-
         query = "SELECT name, uuid, project, status, created_at, expireAt FROM experiments WHERE 1=1"
         q_params = []
-
         if filter_name:
             query += " AND name = ?"
             q_params.append(filter_name)
@@ -347,10 +317,8 @@ def listExperiments():
         if filter_uuid_startswith:
             query += " AND uuid LIKE ?"
             q_params.append(filter_uuid_startswith + "%")
-
         cursor.execute(query, q_params)
         rows = cursor.fetchall()
-
         experiments_list = []
         for row in rows:
             experiments_list.append({
@@ -361,9 +329,7 @@ def listExperiments():
                 'created_at': row[4],
                 'expireAt': row[5]
             })
-
         return jsonify(experiments_list), 200
-
     except Exception as e:
         app.logger.error(f"Error listing experiments: {e}")
         return jsonify({'error': str(e)}), 500
@@ -377,20 +343,16 @@ def delete_expired_documents():
         cursor.execute("SELECT name, expireAt FROM experiments")
         rows = cursor.fetchall()
         deleted_count = 0
-
         for row in rows:
             exp_name = row[0]
             expire_at_str = row[1]
-
             try:
                 expire_dt = datetime.fromisoformat(expire_at_str)
             except ValueError:
                 continue
-
             if expire_dt <= now:
                 cursor.execute("DELETE FROM experiments WHERE name = ?", (exp_name,))
                 deleted_count += 1
-
         if deleted_count > 0:
             connection.commit()
             app.logger.info(f"Deleted {deleted_count} expired record(s) from SQLite.")
@@ -402,11 +364,128 @@ def schedule_deletion():
 
 threading.Thread(target=schedule_deletion, daemon=True).start()
 
+# -------------------------------------------------------------------
+# New Method: Collect CloudLab Experiments via Selenium
+# -------------------------------------------------------------------
+def collect_cloudlab_experiments():
+    logs = []
+    def log(msg):
+        logs.append(msg)
+        app.logger.info(msg)
+    try:
+        # Retrieve credentials from file (no interactive prompt)
+        if os.path.exists("credentials.txt"):
+            with open("credentials.txt", "r") as f:
+                lines = f.readlines()
+                if len(lines) < 2:
+                    return jsonify({"error": "credentials.txt does not contain enough lines."}), 400
+                USERNAME = lines[0].strip()
+                PASSWORD = lines[1].strip()
+        else:
+            while not USERNAME or not PASSWORD:
+                USERNAME = input("Enter your username: ")
+                PASSWORD = getpass.getpass("Enter your password: ")
+                log("Credentials loaded.")
+        
+        # Setup ChromeDriver with temporary user data
+        options = webdriver.ChromeOptions()
+        temp_user_data = tempfile.mkdtemp()
+        options.add_argument(f"--user-data-dir={temp_user_data}")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--headless")
+        options.add_argument("--disable-gpu")
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=options)
+        log("ChromeDriver initialized.")
+        
+        # Load CloudLab login page
+        driver.get("https://www.cloudlab.us/login.php")
+        wait = WebDriverWait(driver, 10)
+        log("Loaded CloudLab login page.")
+        
+        # Log in to CloudLab
+        username_field = wait.until(EC.presence_of_element_located((By.NAME, "uid")))
+        password_field = wait.until(EC.presence_of_element_located((By.NAME, "password")))
+        username_field.send_keys(USERNAME)
+        password_field.send_keys(PASSWORD)
+        login_button = wait.until(EC.element_to_be_clickable((By.ID, "quickvm_login_modal_button")))
+        login_button.click()
+        log("Login button clicked.")
+        
+        # Navigate to Experiments tab
+        experiments_tab = wait.until(EC.element_to_be_clickable((By.ID, "usertab-experiments")))
+        experiments_tab.click()
+        log("Navigated to Experiments tab.")
+        
+        # Wait for the experiments table to load and extract its data
+        experiment_table = wait.until(EC.visibility_of_element_located((By.TAG_NAME, "table")))
+        rows = experiment_table.find_elements(By.TAG_NAME, "tr")
+        if not rows:
+            log("No table rows found.")
+        headers = [th.text for th in rows[0].find_elements(By.TAG_NAME, "th")]
+        log(f"Extracted headers: {headers}")
+        experiments_data = []
+        management_node_link = None
+        for row in rows[1:]:
+            cols = row.find_elements(By.TAG_NAME, "td")
+            if cols:
+                row_data = [c.text for c in cols]
+                experiments_data.append(row_data)
+                if row_data[0].strip().lower() == "management-node" and management_node_link is None:
+                    try:
+                        management_node_link = cols[0].find_element(By.TAG_NAME, "a")
+                    except Exception:
+                        management_node_link = row
+        # Convert extracted data to a DataFrame
+        df = pd.DataFrame(experiments_data, columns=headers)
+        if "Creator" in df.columns:
+            df = df[df["Creator"] == USERNAME]
+        else:
+            log("No 'Creator' column found; skipping user-based filtering.")
+        csv_filename = "cloudlab_experiments.csv"
+        df.to_csv(csv_filename, index=False)
+        log(f"Data saved to '{csv_filename}'.")
+        
+        # Locate and click the experiment named "management-node"
+        if management_node_link:
+            management_node_link.click()
+            log("Clicked on 'management-node' experiment. Navigating to details page...")
+            expiration_element = wait.until(
+                lambda d: d.find_element(By.ID, "quickvm_expires") if d.find_element(By.ID, "quickvm_expires").text.strip() != "" else False
+            )
+            expiration_text = expiration_element.text.strip()
+            log(f"Expiration text found: {expiration_text}")
+            with open("managementNodeDuration.txt", "w") as f:
+                f.write(expiration_text + "\n")
+            log("Saved management node expiration to 'managementNodeDuration.txt'.")
+        else:
+            log("No row found with name 'management-node'.")
+        driver.quit()
+        return jsonify({"message": "CloudLab experiments collected successfully", "logs": logs}), 200
+    except Exception as e:
+        app.logger.error(f"Error in collect_cloudlab_experiments: {e}")
+        return jsonify({"error": str(e), "logs": logs}), 500
+
+# -------------------------------------------------------------------
+# Endpoint to trigger CloudLab experiments collection
+# -------------------------------------------------------------------
+@app.route('/collect', methods=['GET'])
+def collect_experiments_endpoint():
+    return collect_cloudlab_experiments()
 
 # -------------------------------------------------------------------
 # Main entry point
 # -------------------------------------------------------------------
+
+# Ensure these run only once, when the script is loaded
+USERNAME = input("Enter your username: ")
+PASSWORD = getpass.getpass("Enter your password: ")
+
 if __name__ == '__main__':
- 
+    port = 8080
+    app.run(debug=True, port=port, host='0.0.0.0')
+if __name__ == '__main__':
+    # Removed subprocess call for experimentCollector.py in favor of the integrated method.
     port = 8080
     app.run(debug=True, port=port, host='0.0.0.0')

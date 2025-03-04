@@ -31,4 +31,4 @@ pip3 install selenium pandas webdriver-manager
 pip install webdriver_manager
 
 # Run the server
-python3 server.py
+#python3 server.py

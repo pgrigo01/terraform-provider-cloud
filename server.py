@@ -1,3 +1,4 @@
+import getpass
 import json
 import re
 import time
@@ -5,7 +6,9 @@ from io import BytesIO
 import threading
 from datetime import datetime, timedelta, timezone
 import tempfile
+import subprocess
 import sqlite3
+import os
 
 from flask import Flask, request, jsonify, Request
 import CloudLabAPI.src.emulab_sslxmlrpc.client.api as api
@@ -455,13 +458,31 @@ threading.Thread(target=schedule_deletion, daemon=True).start()
 # Main entry point
 # -------------------------------------------------------------------
 if __name__ == '__main__':
-    import subprocess
-
-    # Run dns.py once before starting the Flask server
-    result = subprocess.run(["python3", "./dns.py"], capture_output=True, text=True)
-    print(result.stdout)
-    if result.returncode != 0:
-        print("dns.py encountered an error")
+    # Prevent Flask from running the script twice
+    os.environ["FLASK_ENV"] = "development"
     
+    # Prompt for CloudLab credentials once
+    username = input("Enter CloudLab username: ").strip()
+    password = getpass.getpass("Enter CloudLab password: ").strip()
+
+    if not username or not password:
+        print("Error: Username or password cannot be empty.")
+        exit(1)
+
+    # Run experimentCollector.py once
+    result = subprocess.run(
+        ["python3", "./experimentCollector.py", username, password], 
+        capture_output=True, text=True
+    )
+
+    print("STDOUT:", result.stdout)
+    print("STDERR:", result.stderr)
+    
+    if result.returncode != 0:
+        print("experimentCollector.py encountered an error. Exiting...")
+        exit(1)
+
+    # Start the Flask server with reloader disabled
     port = 8080
-    app.run(debug=True, port=port, host='0.0.0.0')
+    app.run(debug=True, port=port, host='0.0.0.0', use_reloader=False)
+

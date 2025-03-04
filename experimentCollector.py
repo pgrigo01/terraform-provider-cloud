@@ -1,4 +1,5 @@
 import os
+import sys
 import getpass
 import pandas as pd
 import tempfile
@@ -9,26 +10,35 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 
-
-
 # -------------------------------
-# Retrieve Credentials First
+# Retrieve Credentials
 # -------------------------------
 USERNAME = ""
 PASSWORD = ""
 
-if os.path.exists("credentials.txt"):
+# Check if credentials are passed as command-line arguments
+if len(sys.argv) > 2:
+    USERNAME = sys.argv[1]
+    PASSWORD = sys.argv[2]
+    print("Using credentials from command-line arguments.")
+elif os.path.exists("credentials.txt"):
     with open("credentials.txt", "r") as f:
         lines = f.readlines()
         USERNAME = lines[0].strip()  # First line: username
         PASSWORD = lines[1].strip()  # Second line: password
+    print("Using credentials from credentials.txt.")
 else:
-    while not USERNAME or not PASSWORD:
-        USERNAME = input("Enter your username: ")
-        PASSWORD = getpass.getpass("Enter your password: ")
+    print("No credentials provided via arguments or file. Prompting user...")
+    USERNAME = input("Enter your username: ").strip()
+    PASSWORD = getpass.getpass("Enter your password: ").strip()
+
+# Ensure username and password are not empty
+if not USERNAME or not PASSWORD:
+    print("Error: Username or password is empty.")
+    sys.exit(1)
 
 # -------------------------------
-# Setup ChromeDriver after credentials are ready
+# Setup ChromeDriver
 # -------------------------------
 options = webdriver.ChromeOptions()
 # Create a temporary directory for user data to avoid conflicts
@@ -44,7 +54,7 @@ service = Service(ChromeDriverManager().install())
 driver = webdriver.Chrome(service=service, options=options)
 
 # -------------------------------
-# Load the CloudLab login page after credentials are obtained
+# Load the CloudLab login page
 # -------------------------------
 driver.get("https://www.cloudlab.us/login.php")
 wait = WebDriverWait(driver, 10)
