@@ -29,6 +29,8 @@ rm google-chrome.deb
 pip3 install selenium pandas webdriver-manager
 
 pip install webdriver_manager
+pip install apscheduler
+
 
 # Run the server
 #python3 server.py
