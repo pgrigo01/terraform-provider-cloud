@@ -1,25 +1,42 @@
+
 #!/usr/bin/env python3
 import subprocess
+import time
+
+MAX_RETRIES = 5  # Maximum number of retries
+RETRY_DELAY = 5  # Delay between retries in seconds
 
 def extend_management_node():
-    # Message explaining the reason for the extension.
-    message = (
-        "The reason I need this extra time for the experiment is that I am developing an algorithm on a central management node. "
-        "This algorithm ensures that the central management node remains active for as long as the last experiment is running. "
-        "For example, if the central management node is set to expire in one hour, I will check if there are any experiments that started after it. "
-        "If so, the node's duration should be extended by adding the remaining time of the latest experiment on that VLAN "
-        "(for example, if two hours are left on the last experiment, then I need to add two hours to the central management node). "
-        "This extension is necessary to prevent the loss of the database that stores information about these experiments."
-    )
-    # Command to extend the experiment.
-    cmd = ["extendExperiment", "-m", message, "UCY-CS499-DC,management-node"]
-    try:
-        output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
-        print("Extend Experiment Output:")
-        print(output.decode("utf-8"))
-    except subprocess.CalledProcessError as e:
-        print("Error calling extendExperiment:")
-        print(e.output.decode("utf-8"))
+    message = "I need extra time because I am developing an algorithm to keep the central management node active as long as the last experiment is running. This prevents database loss."
+
+    cmd = ["extendExperiment", "-m", message, "UCY-CS499-DC,management-node", "12"]
+
+    attempt = 0
+    while attempt < MAX_RETRIES:
+        try:
+            output = subprocess.check_output(cmd, stderr=subprocess.STDOUT).decode("utf-8").strip()
+
+            if output:  # Ensure output is not empty
+                print("Extend Experiment Output:")
+                print(output)
+                return  # Exit successfully
+
+            else:
+                print(f"Attempt {attempt + 1}: Received empty response. Retrying in {RETRY_DELAY} seconds...")
+
+        except subprocess.CalledProcessError as e:
+            error_message = e.output.decode("utf-8").strip()
+            if "SSL: UNEXPECTED_EOF_WHILE_READING" in error_message:
+                print(f"Attempt {attempt + 1}: SSL error encountered. Retrying in {RETRY_DELAY} seconds...")
+            else:
+                print("Error calling extendExperiment:")
+                print(error_message)
+                return  # Exit if it's a non-retryable error
+
+        attempt += 1
+        time.sleep(RETRY_DELAY)  # Wait before retrying
+
+    print("Max retries reached. The experiment extension request may have failed.")
 
 if __name__ == '__main__':
     extend_management_node()
