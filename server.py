@@ -481,7 +481,12 @@ if __name__ == '__main__':
     if result.returncode != 0:
         print("experimentCollector.py encountered an error. Exiting...")
         exit(1)
-
+    # Run dns.py once before starting the Flask server
+    result = subprocess.run(["python3", "./dns.py"], capture_output=True, text=True)
+    print(result.stdout)
+    if result.returncode != 0:
+        print("dns.py encountered an error")
+    
     # Start the Flask server with reloader disabled
     port = 8080
     app.run(debug=True, port=port, host='0.0.0.0', use_reloader=False)
