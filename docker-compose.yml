@@ -15,6 +15,6 @@ services:
       - FLASK_ENV=production
     command: bash -c "
       pip install --upgrade pip &&
-      pip install flask gunicorn  firebase_admin &&  
+      pip install flask gunicorn &&  
       gunicorn -b 0.0.0.0:8080 --timeout 120 server:app"
 
