@@ -57,7 +57,7 @@ driver = webdriver.Chrome(service=service, options=options)
 # Load the CloudLab login page
 # -------------------------------
 driver.get("https://www.cloudlab.us/login.php")
-wait = WebDriverWait(driver, 10)
+wait = WebDriverWait(driver, 1)
 
 try:
     # 1) Log in to CloudLab using the provided credentials.

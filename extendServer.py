@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 import tempfile
 import subprocess
 import os
+import csv
 
 from flask import Flask, request, jsonify, Request
 import CloudLabAPI.src.emulab_sslxmlrpc.client.api as api
@@ -281,7 +282,68 @@ def terminateExperiment():
     return ERRORMESSAGES[exitval]
 
 # -------------------------------------------------------------------
-# Main entry point with scheduling for experimentCollector.py every 2 minutes (for testing)
+# Helper Function: Check and Extend Management Node
+# -------------------------------------------------------------------
+def checkAndExtendManagementNode():
+    app.logger.info("Checking if management node extension is needed...")
+    # 1. Update experiment expiration times via getCSVExperimentInfo.py
+    result = subprocess.run(["python3", "./getCSVExperimentInfo.py"], capture_output=True, text=True)
+    app.logger.info("getCSVExperimentInfo.py STDOUT:")
+    app.logger.info(result.stdout)
+    app.logger.info("getCSVExperimentInfo.py STDERR:")
+    app.logger.info(result.stderr)
+    
+    try:
+        management_expire = None
+        last_experiment_expire = None
+        with open("experiment_expire_times.csv", newline="") as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                expire_str = row.get("ExpireTime", "").strip()
+                if not expire_str:
+                    continue
+                # Parse the expiration time. Adjust the format if needed.
+                try:
+                    expire_time = datetime.strptime(expire_str, "%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    try:
+                        expire_time = datetime.fromisoformat(expire_str)
+                    except Exception as e:
+                        app.logger.error(f"Error parsing expiration time '{expire_str}': {e}")
+                        continue
+
+                # Check if this row corresponds to the management node.
+                if row.get("Name", "").strip().lower() == "management-node":
+                    management_expire = expire_time
+                else:
+                    if (last_experiment_expire is None) or (expire_time > last_experiment_expire):
+                        last_experiment_expire = expire_time
+
+        if management_expire is None or last_experiment_expire is None:
+            app.logger.info("Either management node or other experiments not found. Skipping extension.")
+            return
+
+        now = datetime.now()
+        management_remaining = (management_expire - now).total_seconds()
+        experiment_remaining = (last_experiment_expire - now).total_seconds()
+
+        if experiment_remaining > management_remaining:
+            extension_seconds = experiment_remaining - management_remaining
+            extension_hours = extension_seconds / 3600.0
+            app.logger.info(f"Extending management node by {extension_hours:.2f} hours.")
+            cmd = ["python3", "./extendExperiment.py", "UCY-CS499-DC,management-node", str(extension_hours)]
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            app.logger.info("extendExperiment.py STDOUT:")
+            app.logger.info(result.stdout)
+            app.logger.info("extendExperiment.py STDERR:")
+            app.logger.info(result.stderr)
+        else:
+            app.logger.info("No extension needed. Management node lasts longer than or equal to other experiments.")
+    except Exception as e:
+        app.logger.error(f"Error in checkAndExtendManagementNode: {e}")
+
+# -------------------------------------------------------------------
+# Main entry point with scheduling for experiment collection and extension
 # -------------------------------------------------------------------
 if __name__ == '__main__':
     # Prevent Flask from running the script twice
@@ -312,7 +374,7 @@ if __name__ == '__main__':
         print("experimentCollector.py encountered an error. Exiting...")
         exit(1)
 
-    # Set up APScheduler to run experimentCollector.py every 1 hour (for testing)
+    # Set up APScheduler to run tasks periodically
     from apscheduler.schedulers.background import BackgroundScheduler
 
     def scheduled_experiment_collector():
@@ -327,15 +389,17 @@ if __name__ == '__main__':
         print(result.stderr)
 
     scheduler = BackgroundScheduler()
-    #Time interval for the scheduler to run experimentCollector.py 
+    # Schedule experimentCollector.py to run every hour (adjust as needed)
     scheduler.add_job(func=scheduled_experiment_collector, trigger="interval", hours=1)
+    # Schedule checkAndExtendManagementNode to run every hour (adjust frequency as needed)
+    scheduler.add_job(func=checkAndExtendManagementNode, trigger="interval", hours=1)
     scheduler.start()
 
     # Run dns.py once before starting the Flask server
-    # result = subprocess.run(["python3", "./dns.py"], capture_output=True, text=True)
-    # print(result.stdout)
-    # if result.returncode != 0:
-    #     print("dns.py encountered an error")
+    result = subprocess.run(["python3", "./dns.py"], capture_output=True, text=True)
+    print(result.stdout)
+    if result.returncode != 0:
+        print("dns.py encountered an error")
 
     # Start the Flask server with reloader disabled
     port = 8080

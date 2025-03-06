@@ -2,14 +2,24 @@
 #!/usr/bin/env python3
 import subprocess
 import time
+import sys
 
 MAX_RETRIES = 5  # Maximum number of retries
 RETRY_DELAY = 5  # Delay between retries in seconds
-HOURS_TO_EXTEND = 12  # Number of hours to extend the experiment
+
+if len(sys.args>2):
+    ProjectAndName=sys.args[1]
+    HOURS_TO_EXTEND=sys.args[2]
+    
+else:
+    print("No arguments provided. Using default UCY-CS499-DC,management-node and 12 hours to extend. ")
+    HOURS_TO_EXTEND = 12  # Number of hours to extend the experiment
+    ProjectAndName="UCY-CS499-DC,management-node"
+
 def extend_management_node():
     message = "I need extra time because I am developing an algorithm to keep the central management node active as long as the last experiment is running. This prevents database loss."
 
-    cmd = ["extendExperiment", "-m", message, "UCY-CS499-DC,management-node", "HOURS_TO_EXTEND"]
+    cmd = ["extendExperiment", "-m", message, "ProjectAndName", "HOURS_TO_EXTEND"]
 
     attempt = 0
     while attempt < MAX_RETRIES:
