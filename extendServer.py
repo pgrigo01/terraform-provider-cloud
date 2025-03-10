@@ -55,7 +55,7 @@ ERRORMESSAGES = {
 }
 
 # -------------------------------------------------------------------
-# Helper Functions
+# Helper Functions for Flask Endpoints
 # -------------------------------------------------------------------
 def is_valid_json(json_str):
     try:
@@ -71,13 +71,8 @@ def dict_to_json(dictionary):
     return json.dumps(dictionary)
 
 def parseArgs(req: Request):
-    """
-    Extracts the uploaded certificate (file) and any parameters (proj, experiment, etc.)
-    from a Flask request.
-    """
     if 'file' not in req.files:
         return (), ("No file provided", 400)
-
     file = req.files['file']
     if file.filename == '':
         return (), ("No file selected", 400)
@@ -103,7 +98,6 @@ def parseArgs(req: Request):
                 params[key] = value_dict
             else:
                 return (), ("Invalid bindings json", 400)
-
     app.logger.debug(f"parseArgs -> file={temp_file_path}, params={params}")
     return (temp_file_path, params), ("", 200)
 
@@ -114,7 +108,7 @@ def parse_uuid_from_response(response_string: str) -> str:
     return ""
 
 # -------------------------------------------------------------------
-# API: Start the experiment (POST /experiment)
+# Flask API Endpoints
 # -------------------------------------------------------------------
 @app.route('/experiment', methods=['POST'])
 def startExperiment():
@@ -124,7 +118,6 @@ def startExperiment():
     if errCode != 200:
         return err
     file, params = args
-
     if 'proj' not in params or 'profile' not in params:
         return "Project and/or profile param not provided", 400
 
@@ -136,7 +129,6 @@ def startExperiment():
     }
     app.logger.info(f"Server configuration: {config}")
     server = xmlrpc.EmulabXMLRPC(config)
-
     if 'bindings' in params and isinstance(params['bindings'], dict):
         params['bindings'] = dict_to_json(params['bindings'])
     app.logger.info(f"Experiment parameters: {params}")
@@ -144,7 +136,6 @@ def startExperiment():
     max_retries = 5
     retry_delay = 3
     exitval, response = None, None
-
     for attempt in range(1, max_retries + 1):
         (exitval, response) = api.startExperiment(server, params).apply()
         app.logger.info(f"startExperiment attempt {attempt}/{max_retries}: exitval={exitval}, response={response}")
@@ -155,20 +146,14 @@ def startExperiment():
                 f"startExperiment attempt {attempt} failed with exitval={exitval}. Retrying in {retry_delay} seconds..."
             )
             time.sleep(retry_delay)
-
     if exitval != 0:
         app.logger.error("All attempts to start experiment failed.")
         return ERRORMESSAGES.get(exitval, ERRORMESSAGES[RESPONSE_ERROR])
-
     cloudlab_uuid = parse_uuid_from_response(str(response))
     app.logger.info(f"Parsed UUID from startExperiment: '{cloudlab_uuid}'")
-
     if not cloudlab_uuid:
         app.logger.info("Could not parse UUID from startExperiment. Checking experimentStatus for the real UUID...")
-        status_params = {
-            'proj': params['proj'],
-            'experiment': f"{params['proj']},{params['name']}"
-        }
+        status_params = {'proj': params['proj'], 'experiment': f"{params['proj']},{params['name']}"}
         (status_exitval, status_response) = api.experimentStatus(server, status_params).apply()
         app.logger.info(f"experimentStatus exitval={status_exitval}, response={status_response}")
         if status_exitval == 0:
@@ -177,18 +162,11 @@ def startExperiment():
         else:
             app.logger.warning("experimentStatus call failed. Storing 'unknown' for UUID.")
             cloudlab_uuid = "unknown"
-
     if not cloudlab_uuid:
         cloudlab_uuid = "unknown"
-
-    app.logger.info(
-        f"Experiment '{params.get('name', 'unnamed')}' started with UUID '{cloudlab_uuid}'."
-    )
+    app.logger.info(f"Experiment '{params.get('name', 'unnamed')}' started with UUID '{cloudlab_uuid}'.")
     return ERRORMESSAGES.get(exitval, ERRORMESSAGES[RESPONSE_ERROR])
 
-# -------------------------------------------------------------------
-# API: experimentStatus (GET /experiment)
-# -------------------------------------------------------------------
 @app.route('/experiment', methods=['GET'])
 def experimentStatus():
     app.logger.info("experimentStatus")
@@ -197,10 +175,8 @@ def experimentStatus():
     if errCode != 200:
         return err
     file, params = args
-
     if 'proj' not in params or 'experiment' not in params:
         return "Project and/or experiment param not provided", 400
-
     params['experiment'] = f"{params['proj']},{params['experiment']}"
     config = {
         "debug": 0,
@@ -210,28 +186,20 @@ def experimentStatus():
     }
     app.logger.info(f"Server configuration: {config}")
     server = xmlrpc.EmulabXMLRPC(config)
-
     max_retries = 5
     retry_delay = 2
     exitval, response = None, None
-
     for attempt in range(1, max_retries + 1):
         (exitval, response) = api.experimentStatus(server, params).apply()
         app.logger.info(f"Attempt {attempt}/{max_retries}, exitval={exitval}, response={response}")
-
         if response is not None and hasattr(response, 'output'):
             return (str(response.output), ERRORMESSAGES[exitval][1])
-
         app.logger.warning(
             f"experimentStatus attempt {attempt} did not return a valid response. Retrying in {retry_delay} second(s)..."
         )
         time.sleep(retry_delay)
-
     return ("No valid status after multiple retries", 500)
 
-# -------------------------------------------------------------------
-# API: Terminate Experiment (DELETE /experiment)
-# -------------------------------------------------------------------
 @app.route('/experiment', methods=['DELETE'])
 def terminateExperiment():
     app.logger.info("terminateExperiment")
@@ -240,9 +208,7 @@ def terminateExperiment():
     if errCode != 200:
         return err
     file, params = args
-
     app.logger.info(f"Received params for termination: {params}")
-
     config = {
         "debug": 0,
         "impotent": 0,
@@ -251,11 +217,9 @@ def terminateExperiment():
     }
     app.logger.info(f"Server configuration: {config}")
     server = xmlrpc.EmulabXMLRPC(config)
-
     max_retries = 5
     retry_delay = 2
     exitval, response = None, None
-
     for attempt in range(1, max_retries + 1):
         (exitval, response) = api.terminateExperiment(server, params).apply()
         app.logger.info(f"terminateExperiment attempt {attempt}/{max_retries}: exitval={exitval}, response={response}")
@@ -266,56 +230,58 @@ def terminateExperiment():
                 f"terminateExperiment attempt {attempt} failed with exitval={exitval}. Retrying in {retry_delay} seconds..."
             )
             time.sleep(retry_delay)
-
     if exitval != 0:
         app.logger.error("All attempts to terminate experiment failed.")
         return ERRORMESSAGES.get(exitval, ERRORMESSAGES[RESPONSE_ERROR])
-
     app.logger.info(f"Experiment termination successful for parameters: {params}.")
     return ERRORMESSAGES[exitval]
 
 # -------------------------------------------------------------------
-# Main entry point with scheduling for experiment collection and extension
+# Helper Methods for Main Setup
 # -------------------------------------------------------------------
-if __name__ == '__main__':
-    # Prevent Flask from running the script twice
-    os.environ["FLASK_ENV"] = "development"
-
-    # Prompt for CloudLab credentials once
-    global_username = input("Enter CloudLab username: ").strip()
-    global_password = getpass.getpass("Enter CloudLab password: ").strip()
-
-    if not global_username or not global_password:
+def get_credentials():
+    username = input("Enter CloudLab username: ").strip()
+    password = getpass.getpass("Enter CloudLab password: ").strip()
+    if not username or not password:
         print("Error: Username or password cannot be empty.")
         exit(1)
+    return username, password
 
-    # 1) Collect experiments once at startup
-    experimentCollector.getExperiments(global_username, global_password)
+def initialize_experiments(username, password):
+    app.logger.info("Initializing experiments at startup...")
+    experimentCollector.getExperiments(username, password)
 
-    # 2) Set up APScheduler to run tasks periodically
+def setup_scheduler(username, password):
     from apscheduler.schedulers.background import BackgroundScheduler
+    scheduler = BackgroundScheduler()
 
     def scheduled_experiment_collector():
         app.logger.info("Running scheduled experimentCollector...")
-        experimentCollector.getExperiments(global_username, global_password)
+        experimentCollector.getExperiments(username, password)
 
-    scheduler = BackgroundScheduler()
-    
-    #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    # Schedule the experiment data refresh every hour.
+    # Schedule experiment data refresh every hour.
     scheduler.add_job(func=scheduled_experiment_collector, trigger="interval", hours=1)
-    
-    #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    # Schedule the extension job using the imported function from algorithmExpExtension.py. 
-    scheduler.add_job(
-        func=extendAllExperimentsToLast,
-        trigger="interval",
-        hours=1,
-        args=[global_username, global_password, 1.0]
-    )
-
+    # Schedule the extension logic using the imported function from algorithmExpExtension.py.
+    scheduler.add_job(func=extendAllExperimentsToLast, trigger="interval", hours=1,
+                      args=[username, password, 1.0])
     scheduler.start()
+    app.logger.info("Scheduler started.")
+    return scheduler
 
-    # 3) Start the Flask server with reloader disabled
+def run_server():
     port = 8080
     app.run(debug=True, port=port, host='0.0.0.0', use_reloader=False)
+
+# -------------------------------------------------------------------
+# Main Entry Point
+# -------------------------------------------------------------------
+def main():
+    global global_username, global_password
+    global_username, global_password = get_credentials()
+    initialize_experiments(global_username, global_password)
+    setup_scheduler(global_username, global_password)
+    run_server()
+
+if __name__ == '__main__':
+    os.environ["FLASK_ENV"] = "development"
+    main()
