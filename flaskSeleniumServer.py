@@ -8,6 +8,8 @@ from datetime import datetime, timedelta, timezone
 import tempfile
 import subprocess
 import os
+import experimentCollector
+import dns
 
 from flask import Flask, request, jsonify, Request
 import CloudLabAPI.src.emulab_sslxmlrpc.client.api as api
@@ -297,34 +299,20 @@ if __name__ == '__main__':
 
     # Store credentials globally for later use by the scheduler
     experiment_credentials = (username, password)
-
-    # Run experimentCollector.py once at startup
-    result = subprocess.run(
-        ["python3", "./experimentCollector.py", username, password],
-        capture_output=True, text=True
-    )
-    print("Initial experimentCollector.py STDOUT:")
-    print(result.stdout)
+    
+    
+    #Run experimentCollector function to get All experiments and store them in cloudlab_experiments.csv
+    result = experimentCollector.cloudlab_scraper(username,password)
+    
+   
     print("Initial experimentCollector.py STDERR:")
-    print(result.stderr)
-
-    if result.returncode != 0:
-        print("experimentCollector.py encountered an error. Exiting...")
-        exit(1)
-
-    # Set up APScheduler to run experimentCollector.py every 1 hour (for testing)
+    print(result)
+    
+    # Set up APScheduler to run experimentCollector.py every 1 hour
     from apscheduler.schedulers.background import BackgroundScheduler
 
     def scheduled_experiment_collector():
-        global experiment_credentials
-        result = subprocess.run(
-            ["python3", "./experimentCollector.py", experiment_credentials[0], experiment_credentials[1]],
-            capture_output=True, text=True
-        )
-        print("Scheduled experimentCollector.py STDOUT:")
-        print(result.stdout)
-        print("Scheduled experimentCollector.py STDERR:")
-        print(result.stderr)
+        result = experimentCollector.getExperiments(username,password)
 
     scheduler = BackgroundScheduler()
     #Time interval for the scheduler to run experimentCollector.py 
@@ -332,10 +320,8 @@ if __name__ == '__main__':
     scheduler.start()
 
     # Run dns.py once before starting the Flask server
-    # result = subprocess.run(["python3", "./dns.py"], capture_output=True, text=True)
-    # print(result.stdout)
-    # if result.returncode != 0:
-    #     print("dns.py encountered an error")
+    # result = dns.update_duckdns()
+    # print(result)
 
     # Start the Flask server with reloader disabled
     port = 8080

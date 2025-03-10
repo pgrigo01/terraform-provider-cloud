@@ -3,16 +3,21 @@ import json
 import re
 import time
 from io import BytesIO
-import threading
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import tempfile
-import subprocess
 import os
 import csv
+import math
 
 from flask import Flask, request, jsonify, Request
 import CloudLabAPI.src.emulab_sslxmlrpc.client.api as api
 import CloudLabAPI.src.emulab_sslxmlrpc.xmlrpc as xmlrpc
+
+# Import your local modules
+import experimentCollector
+import getCSVExperimentInfo
+import extendExperiment
+from algorithmExpExtension import extendAllExperimentsToLast
 
 # --------------------------
 # Flask App and Logger Setup
@@ -50,7 +55,7 @@ ERRORMESSAGES = {
 }
 
 # -------------------------------------------------------------------
-# Helper: Check if a string is valid JSON
+# Helper Functions
 # -------------------------------------------------------------------
 def is_valid_json(json_str):
     try:
@@ -59,22 +64,17 @@ def is_valid_json(json_str):
     except json.JSONDecodeError:
         return False
 
-# -------------------------------------------------------------------
-# Helper: Convert JSON string to dict
-# -------------------------------------------------------------------
 def json_to_dict(json_string):
     return json.loads(json_string)
 
-# -------------------------------------------------------------------
-# Helper: Convert dict to JSON string
-# -------------------------------------------------------------------
 def dict_to_json(dictionary):
     return json.dumps(dictionary)
 
-# -------------------------------------------------------------------
-# parseArgs: Parse the form-data for file (certificate) + params
-# -------------------------------------------------------------------
 def parseArgs(req: Request):
+    """
+    Extracts the uploaded certificate (file) and any parameters (proj, experiment, etc.)
+    from a Flask request.
+    """
     if 'file' not in req.files:
         return (), ("No file provided", 400)
 
@@ -107,9 +107,6 @@ def parseArgs(req: Request):
     app.logger.debug(f"parseArgs -> file={temp_file_path}, params={params}")
     return (temp_file_path, params), ("", 200)
 
-# -------------------------------------------------------------------
-# Helper: Example function to parse UUID from any given string
-# -------------------------------------------------------------------
 def parse_uuid_from_response(response_string: str) -> str:
     match = re.search(r"UUID:\s+([a-z0-9-]+)", response_string, re.IGNORECASE)
     if match:
@@ -137,15 +134,17 @@ def startExperiment():
         "verify": 0,
         "certificate": file,
     }
-    app.logger.info(f'Server configuration: {config}')
+    app.logger.info(f"Server configuration: {config}")
     server = xmlrpc.EmulabXMLRPC(config)
 
     if 'bindings' in params and isinstance(params['bindings'], dict):
         params['bindings'] = dict_to_json(params['bindings'])
-    app.logger.info(f'Experiment parameters: {params}')
+    app.logger.info(f"Experiment parameters: {params}")
 
     max_retries = 5
     retry_delay = 3
+    exitval, response = None, None
+
     for attempt in range(1, max_retries + 1):
         (exitval, response) = api.startExperiment(server, params).apply()
         app.logger.info(f"startExperiment attempt {attempt}/{max_retries}: exitval={exitval}, response={response}")
@@ -182,11 +181,9 @@ def startExperiment():
     if not cloudlab_uuid:
         cloudlab_uuid = "unknown"
 
-    # Instead of storing to SQLite, just log the experiment details.
     app.logger.info(
-        f"Experiment '{params['name']}' started with UUID '{cloudlab_uuid}'."
+        f"Experiment '{params.get('name', 'unnamed')}' started with UUID '{cloudlab_uuid}'."
     )
-
     return ERRORMESSAGES.get(exitval, ERRORMESSAGES[RESPONSE_ERROR])
 
 # -------------------------------------------------------------------
@@ -205,18 +202,18 @@ def experimentStatus():
         return "Project and/or experiment param not provided", 400
 
     params['experiment'] = f"{params['proj']},{params['experiment']}"
-
     config = {
         "debug": 0,
         "impotent": 0,
         "verify": 0,
         "certificate": file,
     }
-    app.logger.info(f'Server configuration: {config}')
+    app.logger.info(f"Server configuration: {config}")
     server = xmlrpc.EmulabXMLRPC(config)
 
     max_retries = 5
     retry_delay = 2
+    exitval, response = None, None
 
     for attempt in range(1, max_retries + 1):
         (exitval, response) = api.experimentStatus(server, params).apply()
@@ -226,8 +223,7 @@ def experimentStatus():
             return (str(response.output), ERRORMESSAGES[exitval][1])
 
         app.logger.warning(
-            f"experimentStatus attempt {attempt} did not return a valid response. "
-            f"Retrying in {retry_delay} second(s)..."
+            f"experimentStatus attempt {attempt} did not return a valid response. Retrying in {retry_delay} second(s)..."
         )
         time.sleep(retry_delay)
 
@@ -253,16 +249,16 @@ def terminateExperiment():
         "verify": 0,
         "certificate": file,
     }
-    app.logger.info(f'Server configuration: {config}')
+    app.logger.info(f"Server configuration: {config}")
     server = xmlrpc.EmulabXMLRPC(config)
 
     max_retries = 5
     retry_delay = 2
+    exitval, response = None, None
+
     for attempt in range(1, max_retries + 1):
         (exitval, response) = api.terminateExperiment(server, params).apply()
-        app.logger.info(
-            f"terminateExperiment attempt {attempt}/{max_retries}: exitval={exitval}, response={response}"
-        )
+        app.logger.info(f"terminateExperiment attempt {attempt}/{max_retries}: exitval={exitval}, response={response}")
         if exitval == 0:
             break
         else:
@@ -275,72 +271,8 @@ def terminateExperiment():
         app.logger.error("All attempts to terminate experiment failed.")
         return ERRORMESSAGES.get(exitval, ERRORMESSAGES[RESPONSE_ERROR])
 
-    app.logger.info(
-        f"Experiment termination successful for parameters: {params}."
-    )
-
+    app.logger.info(f"Experiment termination successful for parameters: {params}.")
     return ERRORMESSAGES[exitval]
-
-# -------------------------------------------------------------------
-# Helper Function: Check and Extend Management Node
-# -------------------------------------------------------------------
-def checkAndExtendManagementNode():
-    app.logger.info("Checking if management node extension is needed...")
-    # 1. Update experiment expiration times via getCSVExperimentInfo.py
-    result = subprocess.run(["python3", "./getCSVExperimentInfo.py"], capture_output=True, text=True)
-    app.logger.info("getCSVExperimentInfo.py STDOUT:")
-    app.logger.info(result.stdout)
-    app.logger.info("getCSVExperimentInfo.py STDERR:")
-    app.logger.info(result.stderr)
-    
-    try:
-        management_expire = None
-        last_experiment_expire = None
-        with open("experiment_expire_times.csv", newline="") as csvfile:
-            reader = csv.DictReader(csvfile)
-            for row in reader:
-                expire_str = row.get("ExpireTime", "").strip()
-                if not expire_str:
-                    continue
-                # Parse the expiration time. Adjust the format if needed.
-                try:
-                    expire_time = datetime.strptime(expire_str, "%Y-%m-%d %H:%M:%S")
-                except ValueError:
-                    try:
-                        expire_time = datetime.fromisoformat(expire_str)
-                    except Exception as e:
-                        app.logger.error(f"Error parsing expiration time '{expire_str}': {e}")
-                        continue
-
-                # Check if this row corresponds to the management node.
-                if row.get("Name", "").strip().lower() == "management-node":
-                    management_expire = expire_time
-                else:
-                    if (last_experiment_expire is None) or (expire_time > last_experiment_expire):
-                        last_experiment_expire = expire_time
-
-        if management_expire is None or last_experiment_expire is None:
-            app.logger.info("Either management node or other experiments not found. Skipping extension.")
-            return
-
-        now = datetime.now()
-        management_remaining = (management_expire - now).total_seconds()
-        experiment_remaining = (last_experiment_expire - now).total_seconds()
-
-        if experiment_remaining > management_remaining:
-            extension_seconds = experiment_remaining - management_remaining
-            extension_hours = extension_seconds / 3600.0
-            app.logger.info(f"Extending management node by {extension_hours:.2f} hours.")
-            cmd = ["python3", "./extendExperiment.py", "UCY-CS499-DC,management-node", str(extension_hours)]
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            app.logger.info("extendExperiment.py STDOUT:")
-            app.logger.info(result.stdout)
-            app.logger.info("extendExperiment.py STDERR:")
-            app.logger.info(result.stderr)
-        else:
-            app.logger.info("No extension needed. Management node lasts longer than or equal to other experiments.")
-    except Exception as e:
-        app.logger.error(f"Error in checkAndExtendManagementNode: {e}")
 
 # -------------------------------------------------------------------
 # Main entry point with scheduling for experiment collection and extension
@@ -350,57 +282,40 @@ if __name__ == '__main__':
     os.environ["FLASK_ENV"] = "development"
 
     # Prompt for CloudLab credentials once
-    username = input("Enter CloudLab username: ").strip()
-    password = getpass.getpass("Enter CloudLab password: ").strip()
+    global_username = input("Enter CloudLab username: ").strip()
+    global_password = getpass.getpass("Enter CloudLab password: ").strip()
 
-    if not username or not password:
+    if not global_username or not global_password:
         print("Error: Username or password cannot be empty.")
         exit(1)
 
-    # Store credentials globally for later use by the scheduler
-    experiment_credentials = (username, password)
+    # 1) Collect experiments once at startup
+    experimentCollector.getExperiments(global_username, global_password)
 
-    # Run experimentCollector.py once at startup
-    result = subprocess.run(
-        ["python3", "./experimentCollector.py", username, password],
-        capture_output=True, text=True
-    )
-    print("Initial experimentCollector.py STDOUT:")
-    print(result.stdout)
-    print("Initial experimentCollector.py STDERR:")
-    print(result.stderr)
-
-    if result.returncode != 0:
-        print("experimentCollector.py encountered an error. Exiting...")
-        exit(1)
-
-    # Set up APScheduler to run tasks periodically
+    # 2) Set up APScheduler to run tasks periodically
     from apscheduler.schedulers.background import BackgroundScheduler
 
     def scheduled_experiment_collector():
-        global experiment_credentials
-        result = subprocess.run(
-            ["python3", "./experimentCollector.py", experiment_credentials[0], experiment_credentials[1]],
-            capture_output=True, text=True
-        )
-        print("Scheduled experimentCollector.py STDOUT:")
-        print(result.stdout)
-        print("Scheduled experimentCollector.py STDERR:")
-        print(result.stderr)
+        app.logger.info("Running scheduled experimentCollector...")
+        experimentCollector.getExperiments(global_username, global_password)
 
     scheduler = BackgroundScheduler()
-    # Schedule experimentCollector.py to run every hour (adjust as needed)
+    
+    #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    # Schedule the experiment data refresh every hour.
     scheduler.add_job(func=scheduled_experiment_collector, trigger="interval", hours=1)
-    # Schedule checkAndExtendManagementNode to run every hour (adjust frequency as needed)
-    scheduler.add_job(func=checkAndExtendManagementNode, trigger="interval", hours=1)
+    
+    #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    # Schedule the extension job using the imported function from algorithmExpExtension.py. 
+    scheduler.add_job(
+        func=extendAllExperimentsToLast,
+        trigger="interval",
+        hours=1,
+        args=[global_username, global_password, 1.0]
+    )
+
     scheduler.start()
 
-    # Run dns.py once before starting the Flask server
-    result = subprocess.run(["python3", "./dns.py"], capture_output=True, text=True)
-    print(result.stdout)
-    if result.returncode != 0:
-        print("dns.py encountered an error")
-
-    # Start the Flask server with reloader disabled
+    # 3) Start the Flask server with reloader disabled
     port = 8080
     app.run(debug=True, port=port, host='0.0.0.0', use_reloader=False)

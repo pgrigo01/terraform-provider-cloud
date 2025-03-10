@@ -28,7 +28,7 @@ def get_experiment_status(exp_spec):
                 time.sleep(3)
     return None
 
-def main():
+def getCSVExperimentsExpireTimes():
     input_csv = "cloudlab_experiments.csv"
     # Overwrite original CSV with valid experiments.
     output_csv = "cloudlab_experiments.csv"
@@ -95,4 +95,4 @@ def main():
         sys.exit(1)
 
 if __name__ == "__main__":
-    main()
+    getCSVExperimentsExpireTimes()
