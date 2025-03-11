@@ -95,7 +95,7 @@ def extendAllExperimentsToLast(username, password, hour_threshold=1.0):
             # Otherwise, we round up the hours
             rounded_hours = math.ceil(float_hours)
 
-            message = f"Extending experiment {project},{name} to match the latest expiration for demonstration."
+            message = f"Extending experiment {project},{name} to match the last experiment running expiration time."
             print(f"Extending {project},{name} by {rounded_hours} hours (rounded up from {float_hours:.2f} hours).")
             extendExperiment.extend_experiment(
                 f"{project},{name}",

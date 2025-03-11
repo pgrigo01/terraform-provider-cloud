@@ -13,7 +13,7 @@ from flask import Flask, request, jsonify, Request
 import CloudLabAPI.src.emulab_sslxmlrpc.client.api as api
 import CloudLabAPI.src.emulab_sslxmlrpc.xmlrpc as xmlrpc
 
-# Import your local modules
+# Local modules used for experiment management and extension
 import experimentCollector
 import getCSVExperimentInfo
 import extendExperiment
@@ -237,7 +237,7 @@ def terminateExperiment():
     return ERRORMESSAGES[exitval]
 
 # -------------------------------------------------------------------
-# Helper Methods for Main Setup
+# Methods for Main Setup
 # -------------------------------------------------------------------
 def get_credentials():
     username = input("Enter CloudLab username: ").strip()

@@ -16,7 +16,7 @@ import sys
 
 def get_experiment_status(exp_spec):
     cmd = ["experimentStatus", "-j", exp_spec]
-    attempts = 3
+    attempts = 5
     for attempt in range(1, attempts + 1):
         try:
             output = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
