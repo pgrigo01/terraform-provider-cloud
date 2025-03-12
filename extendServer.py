@@ -8,15 +8,13 @@ import tempfile
 import os
 import csv
 import math
-
+from apscheduler.schedulers.background import BackgroundScheduler
 from flask import Flask, request, jsonify, Request
 import CloudLabAPI.src.emulab_sslxmlrpc.client.api as api
 import CloudLabAPI.src.emulab_sslxmlrpc.xmlrpc as xmlrpc
 
 # Local modules used for experiment management and extension
 import experimentCollector
-import getCSVExperimentInfo
-import extendExperiment
 from algorithmExpExtension import extendAllExperimentsToLast
 
 # --------------------------
@@ -252,7 +250,7 @@ def initialize_experiments(username, password):
     experimentCollector.getExperiments(username, password)
 
 def setup_scheduler(username, password):
-    from apscheduler.schedulers.background import BackgroundScheduler
+   
     scheduler = BackgroundScheduler()
 
     def scheduled_experiment_collector():
@@ -282,6 +280,7 @@ def main():
     setup_scheduler(global_username, global_password)
     run_server()
 
-if __name__ == '__main__':
-    os.environ["FLASK_ENV"] = "development"
+if __name__ == '__main__':  
+    #os.environ["FLASK_ENV"] = "development"
+    os.environ["FLASK_ENV"] = "info"
     main()

@@ -107,7 +107,7 @@ def extendAllExperimentsToLast(username, password, hour_threshold=1.0):
 
 def main():
     """
-    Main entry point. Gathers credentials and calls the extension logic.
+    Gathers credentials and calls the extension logic.
     Usage:
       python3 extendAllToLastTest.py [username] [password]
     If username/password are not provided, you will be prompted.

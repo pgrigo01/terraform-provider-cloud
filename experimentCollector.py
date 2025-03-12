@@ -56,7 +56,7 @@ def getExperiments(username=None, password=None):
     options.add_argument(f"--user-data-dir={temp_user_data}")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--headless")  # Uncomment for headless mode
+    options.add_argument("--headless")  # Uncomment to show a browser window
     options.add_argument("--disable-gpu")
 
     service = Service(ChromeDriverManager().install())
@@ -114,23 +114,6 @@ def getExperiments(username=None, password=None):
         # 6) Save CSV
         df.to_csv("cloudlab_experiments.csv", index=False)
         print("Data saved to 'cloudlab_experiments.csv'")
-
-        # # 7) Click on 'management-node' and get expiration
-        # if management_node_link:
-        #     management_node_link.click()
-        #     print("Clicked on 'management-node' experiment.")
-
-        #     expiration_element = wait.until(
-        #         lambda d: d.find_element(By.ID, "quickvm_expires") if d.find_element(By.ID, "quickvm_expires").text.strip() != "" else False
-        #     )
-        #     expiration_text = expiration_element.text.strip()
-        #     print("Expiration text found:", expiration_text)
-
-        #     with open("managementNodeDuration.txt", "w") as f:
-        #         f.write(expiration_text + "\n")
-        #     print("Saved management node expiration to 'managementNodeDuration.txt'")
-        # else:
-        #     print("No 'management-node' row found.")
 
     except Exception as e:
         print("[ERROR]:", e)
