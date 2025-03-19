@@ -5,4 +5,4 @@ pip install selenium
 pip install apscheduler
 #python3 firefox.py 
 pip install webdriver_manager
-python3 extendServer.py
+python3 fireoxServer.py
