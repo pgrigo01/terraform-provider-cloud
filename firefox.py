@@ -19,6 +19,7 @@ def getExperiments(username=None, password=None):
     :param username: CloudLab username (optional, will prompt if not provided)
     :param password: CloudLab password (optional, will prompt if not provided)
     """
+
     # -------------------------------
     # Retrieve Credentials
     # -------------------------------
@@ -40,8 +41,7 @@ def getExperiments(username=None, password=None):
         else:
             print("No credentials provided via arguments or file. Prompting user...")
             USERNAME = input("Enter your username: ").strip()
-            # PASSWORD = getpass.getpass("Enter your password: ").strip()
-            PASSWORD = input("Enter your password: ").strip()
+            PASSWORD = getpass.getpass("Enter your password: ").strip()
 
     # Ensure username and password are not empty
     if not USERNAME or not PASSWORD:
@@ -49,17 +49,18 @@ def getExperiments(username=None, password=None):
         sys.exit(1)
 
     # -------------------------------
-    # Setup FirefoxDriver
+    # Setup Firefox WebDriver
     # -------------------------------
     options = webdriver.FirefoxOptions()
-    # Enable headless mode if you don't want the browser window to appear
-    options.headless = True
+    temp_user_data = tempfile.mkdtemp()
+    options.set_preference("browser.cache.disk.enable", False)
+    options.set_preference("browser.cache.memory.enable", False)
+    options.set_preference("browser.cache.offline.enable", False)
+    options.set_preference("network.http.use-cache", False)
+    options.add_argument("--headless")  # Uncomment to show a browser window
 
-    # Optionally, you can use a temporary profile if needed (Firefox handles profiles differently than Chrome)
-    # profile = webdriver.FirefoxProfile(tempfile.mkdtemp())
-    # driver = webdriver.Firefox(service=Service(GeckoDriverManager().install()), options=options, firefox_profile=profile)
-
-    driver = webdriver.Firefox(service=Service(GeckoDriverManager().install()), options=options)
+    service = Service(GeckoDriverManager().install())
+    driver = webdriver.Firefox(service=service, options=options)
 
     try:
         # -------------------------------

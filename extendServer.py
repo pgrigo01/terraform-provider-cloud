@@ -15,6 +15,7 @@ import CloudLabAPI.src.emulab_sslxmlrpc.xmlrpc as xmlrpc
 
 # Local modules used for experiment management and extension
 import experimentCollector
+import firefox
 from algorithmExpExtension import extendAllExperimentsToLast
 
 # --------------------------
@@ -248,7 +249,7 @@ def get_credentials():
 
 def initialize_experiments(username, password):
     app.logger.info("Initializing experiments at startup...")
-    experimentCollector.getExperiments(username, password)
+    firefox.getExperiments(username, password)
 
 def setup_scheduler(username, password):
    
@@ -256,7 +257,7 @@ def setup_scheduler(username, password):
 
     def scheduled_experiment_collector():
         app.logger.info("Running scheduled experimentCollector...")
-        experimentCollector.getExperiments(username, password)
+        firefox.getExperiments(username, password)
 
     # Schedule experiment data refresh every hour.
     scheduler.add_job(func=scheduled_experiment_collector, trigger="interval", hours=1)
