@@ -129,12 +129,13 @@ def startExperiment():
     server = xmlrpc.EmulabXMLRPC(config)
     if 'bindings' in params and isinstance(params['bindings'], dict):
         params['bindings'] = dict_to_json(params['bindings'])
-    app.logger.info(f"Experiment parameters: {params}")
+    app.logger.info(f"Experiment parameters!!!: {params}")
 
     max_retries = 5
     retry_delay = 3
     exitval, response = None, None
     for attempt in range(1, max_retries + 1):
+        #print(params)
         (exitval, response) = api.startExperiment(server, params).apply()
         app.logger.info(f"startExperiment attempt {attempt}/{max_retries}: exitval={exitval}, response={response}")
         if exitval == 0:
