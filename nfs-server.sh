@@ -8,11 +8,11 @@ EXPORT_DIR="$HOME/nfsshare"
 
 echo "Starting NFS server setup..."
 
-# Install nfs-kernel-server if not installed
-# if ! command -v nfsd > /dev/null 2>&1; then
-#     echo "Installing nfs-kernel-server..."
-#     sudo apt-get update && sudo apt-get install -y nfs-kernel-server
-# fi
+# Install nfs-kernel-server if exportfs is not available
+if ! command -v exportfs > /dev/null 2>&1; then
+    echo "Installing nfs-kernel-server..."
+    sudo apt-get update && sudo apt-get install -y nfs-kernel-server
+fi
 
 # Create the export directory if it does not exist
 if [ ! -d "$EXPORT_DIR" ]; then
