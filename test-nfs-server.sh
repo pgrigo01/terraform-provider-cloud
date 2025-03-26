@@ -21,9 +21,16 @@ if [ ! -d "$EXPORT_DIR" ]; then
     chmod 777 "$EXPORT_DIR"
 fi
 
-# Get the server's IP address (assumes eth0 is the main interface in CloudLab)
-SERVER_IP=$(ip addr show eth0 | grep -oP 'inet \K[\d.]+')
-echo "Server IP is: $SERVER_IP"
+# Get the server's IP address (auto-detect interface)
+# Find primary interface (non-localhost with an IPv4 address)
+PRIMARY_INTERFACE=$(ip -o -4 route show to default | awk '{print $5}')
+if [ -z "$PRIMARY_INTERFACE" ]; then
+    # Fallback: get first non-localhost interface with an IP
+    PRIMARY_INTERFACE=$(ip -o -4 addr show scope global | head -1 | awk '{print $2}')
+fi
+SERVER_IP=$(ip -o -4 addr show dev "$PRIMARY_INTERFACE" | awk '{print $4}' | cut -d/ -f1)
+
+echo "Server IP is: $SERVER_IP (interface: $PRIMARY_INTERFACE)"
 
 # Update /etc/exports to export the directory to any host
 EXPORTS_LINE="$EXPORT_DIR *(rw,sync,no_subtree_check,no_root_squash)"
