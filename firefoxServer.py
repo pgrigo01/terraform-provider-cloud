@@ -201,6 +201,7 @@ def experimentStatus():
     return ("No valid status after multiple retries", 500)
 
 @app.route('/experiment', methods=['DELETE'])
+@app.route('/experiment', methods=['DELETE'])
 def terminateExperiment():
     app.logger.info("terminateExperiment")
     args, err = parseArgs(request)
@@ -209,6 +210,23 @@ def terminateExperiment():
         return err
     file, params = args
     app.logger.info(f"Received params for termination: {params}")
+
+    # --- New logic: Use UUID if provided ---
+    # If a "uuid" parameter exists and is non-empty, then use it as the experiment identifier.
+    if 'uuid' in params and params['uuid'].strip() != "":
+        params["experiment"] = params["uuid"].strip()
+        app.logger.info(f"Using UUID for termination: {params['experiment']}")
+    else:
+        # Otherwise, if the "experiment" field is not a UUID (e.g. no dash), use command style:
+        exp = params.get("experiment", "")
+        if exp == "" and "name" in params and params["name"] != "":
+            exp = params["name"]
+        if "-" not in exp:
+            exp = f"{params['proj']},{exp}"
+            params["experiment"] = exp
+            app.logger.info(f"Using command-style termination: {params['experiment']}")
+    # ------------------------------------------------
+
     config = {
         "debug": 0,
         "impotent": 0,
