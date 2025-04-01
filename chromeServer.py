@@ -15,7 +15,6 @@ import CloudLabAPI.src.emulab_sslxmlrpc.xmlrpc as xmlrpc
 
 # Local modules used for experiment management and extension
 import experimentCollector
-import firefox
 from algorithmExpExtension import extendAllExperimentsToLast
 
 # --------------------------
@@ -293,7 +292,7 @@ def run_server():
 # -------------------------------------------------------------------
 # Main Entry Point
 # -------------------------------------------------------------------
-def main():
+def runChromeServer():
     global global_username, global_password
     global_username, global_password = get_credentials()
     initialize_experiments(global_username, global_password)
@@ -303,4 +302,4 @@ def main():
 if __name__ == '__main__':  
     #os.environ["FLASK_ENV"] = "development"
     os.environ["FLASK_ENV"] = "info"
-    main()
+    runChromeServer()
