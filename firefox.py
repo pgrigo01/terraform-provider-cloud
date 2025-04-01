@@ -10,10 +10,9 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.firefox import GeckoDriverManager
 
-
 def getExperiments(username=None, password=None):
     """
-    Logs into CloudLab, extracts experiments table, filters for user's experiments,
+    Logs into CloudLab, extracts the experiments table, filters for the user's experiments,
     saves data to CSV, and fetches 'management-node' expiration date if exists.
 
     :param username: CloudLab username (optional, will prompt if not provided)
@@ -27,7 +26,6 @@ def getExperiments(username=None, password=None):
     PASSWORD = password
 
     if not USERNAME or not PASSWORD:
-        # Check if credentials are passed as command-line arguments
         if len(sys.argv) > 2:
             USERNAME = sys.argv[1]
             PASSWORD = sys.argv[2]
@@ -43,7 +41,6 @@ def getExperiments(username=None, password=None):
             USERNAME = input("Enter your username: ").strip()
             PASSWORD = getpass.getpass("Enter your password: ").strip()
 
-    # Ensure username and password are not empty
     if not USERNAME or not PASSWORD:
         print("Error: Username or password is empty.")
         sys.exit(1)
@@ -53,11 +50,12 @@ def getExperiments(username=None, password=None):
     # -------------------------------
     options = webdriver.FirefoxOptions()
     temp_user_data = tempfile.mkdtemp()
+    # Disable caching for a cleaner session
     options.set_preference("browser.cache.disk.enable", False)
     options.set_preference("browser.cache.memory.enable", False)
     options.set_preference("browser.cache.offline.enable", False)
     options.set_preference("network.http.use-cache", False)
-    options.add_argument("--headless")  # Uncomment to show a browser window
+    options.add_argument("--headless")  # Running in headless mode; comment out to show the browser window
 
     service = Service(GeckoDriverManager().install())
     driver = webdriver.Firefox(service=service, options=options)
@@ -76,10 +74,16 @@ def getExperiments(username=None, password=None):
         password_field.send_keys(PASSWORD)
         login_button = wait.until(EC.element_to_be_clickable((By.ID, "quickvm_login_modal_button")))
         login_button.click()
-        print("Login successful!")
+
+        # Wait for the experiments tab to confirm a successful login
+        try:
+            experiments_tab = wait.until(EC.element_to_be_clickable((By.ID, "usertab-experiments")))
+            print("Login successful!")
+        except Exception:
+            print("Login failed: Username or password may be incorrect.")
+            return  # Stop further execution without exposing the stacktrace
 
         # 2) Navigate to Experiments
-        experiments_tab = wait.until(EC.element_to_be_clickable((By.ID, "usertab-experiments")))
         experiments_tab.click()
         print("Navigated to Experiments tab")
 
@@ -92,7 +96,6 @@ def getExperiments(username=None, password=None):
         # 4) Extract data and search for "management-node"
         experiments_data = []
         management_node_link = None
-
         for row in rows[1:]:
             cols = row.find_elements(By.TAG_NAME, "td")
             if cols:
@@ -115,12 +118,12 @@ def getExperiments(username=None, password=None):
         df.to_csv("cloudlab_experiments.csv", index=False)
         print("Data saved to 'cloudlab_experiments.csv'")
 
-    except Exception as e:
-        print("[ERROR]:", e)
-
+    except Exception:
+        print("[ERROR]: An error occurred during the process.")
+        # Optionally, log error details to a file for further debugging.
     finally:
         driver.quit()
 
 
 if __name__ == "__main__":
-    getExperiments()  # Call without params, will prompt or use file/args if needed
+    getExperiments()  # Call without params; will prompt or use file/args if needed

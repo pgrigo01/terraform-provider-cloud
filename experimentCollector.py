@@ -10,14 +10,10 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 
-
 def getExperiments(username=None, password=None):
     """
     Logs into CloudLab, extracts experiments table, filters for user's experiments,
     saves data to CSV, and fetches 'management-node' expiration date if exists.
-
-    :param username: CloudLab username (optional, will prompt if not provided)
-    :param password: CloudLab password (optional, will prompt if not provided)
     """
 
     # -------------------------------
@@ -27,7 +23,6 @@ def getExperiments(username=None, password=None):
     PASSWORD = password
 
     if not USERNAME or not PASSWORD:
-        # Check if credentials are passed as command-line arguments
         if len(sys.argv) > 2:
             USERNAME = sys.argv[1]
             PASSWORD = sys.argv[2]
@@ -35,15 +30,14 @@ def getExperiments(username=None, password=None):
         elif os.path.exists("credentials.txt"):
             with open("credentials.txt", "r") as f:
                 lines = f.readlines()
-                USERNAME = lines[0].strip()  # First line: username
-                PASSWORD = lines[1].strip()  # Second line: password
+                USERNAME = lines[0].strip()
+                PASSWORD = lines[1].strip()
             print("Using credentials from credentials.txt.")
         else:
             print("No credentials provided via arguments or file. Prompting user...")
             USERNAME = input("Enter your username: ").strip()
             PASSWORD = getpass.getpass("Enter your password: ").strip()
 
-    # Ensure username and password are not empty
     if not USERNAME or not PASSWORD:
         print("Error: Username or password is empty.")
         sys.exit(1)
@@ -56,40 +50,43 @@ def getExperiments(username=None, password=None):
     options.add_argument(f"--user-data-dir={temp_user_data}")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--headless")  # Uncomment to show a browser window
+    # options.add_argument("--headless")  # Uncomment to run in headless mode
     options.add_argument("--disable-gpu")
 
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=options)
 
     try:
-        # -------------------------------
-        # Load the CloudLab login page
-        # -------------------------------
         driver.get("https://www.cloudlab.us/login.php")
         wait = WebDriverWait(driver, 10)
 
-        # 1) Log in
+        # Log in
         username_field = wait.until(EC.presence_of_element_located((By.NAME, "uid")))
         password_field = wait.until(EC.presence_of_element_located((By.NAME, "password")))
         username_field.send_keys(USERNAME)
         password_field.send_keys(PASSWORD)
         login_button = wait.until(EC.element_to_be_clickable((By.ID, "quickvm_login_modal_button")))
         login_button.click()
-        print("Login successful!")
 
-        # 2) Navigate to Experiments
-        experiments_tab = wait.until(EC.element_to_be_clickable((By.ID, "usertab-experiments")))
+        # Wait for the experiments tab to confirm successful login
+        try:
+            experiments_tab = wait.until(EC.element_to_be_clickable((By.ID, "usertab-experiments")))
+            print("Login successful!")
+        except Exception:
+            print("Login failed: Username or password may be incorrect.")
+            return  # Stop further execution without printing the stacktrace
+
+        # Navigate to Experiments
         experiments_tab.click()
         print("Navigated to Experiments tab")
 
-        # 3) Wait for the experiments table
+        # Wait for the experiments table
         experiment_table = wait.until(EC.visibility_of_element_located((By.TAG_NAME, "table")))
         rows = experiment_table.find_elements(By.TAG_NAME, "tr")
         headers = [th.text for th in rows[0].find_elements(By.TAG_NAME, "th")]
         print("Extracted headers:", headers)
 
-        # 4) Extract data and search for "management-node"
+        # Extract data and search for "management-node"
         experiments_data = []
         management_node_link = None
 
@@ -104,23 +101,24 @@ def getExperiments(username=None, password=None):
                     except Exception:
                         management_node_link = row
 
-        # 5) Convert to DataFrame and filter by creator
+        # Convert to DataFrame and filter by creator
         df = pd.DataFrame(experiments_data, columns=headers)
         if "Creator" in df.columns:
             df = df[df["Creator"] == USERNAME]
         else:
             print("No 'Creator' column found; skipping user-based filtering.")
 
-        # 6) Save CSV
+        # Save CSV
         df.to_csv("cloudlab_experiments.csv", index=False)
         print("Data saved to 'cloudlab_experiments.csv'")
 
     except Exception as e:
-        print("[ERROR]:", e)
-
+        print("[ERROR]: An error occurred during the process.")
+        # Optionally, log the error details to a file or logging system:
+        # with open("error.log", "a") as log_file:
+        #     log_file.write(str(e) + "\n")
     finally:
         driver.quit()
-
 
 
 if __name__ == "__main__":
