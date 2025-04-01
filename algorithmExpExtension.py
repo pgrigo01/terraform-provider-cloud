@@ -5,7 +5,7 @@ import csv
 import math
 from datetime import datetime, timezone
 
-import experimentCollector
+import chromeExperimentCollector
 import getCSVExperimentInfo
 import extendExperiment
 
@@ -43,7 +43,7 @@ def extendAllExperimentsToLast(username, password, hour_threshold=1.0):
        We only round up if the raw difference >= hour_threshold, to avoid extending for small differences.
     """
     print("=== Step 1: Collecting experiment data ===")
-    experimentCollector.getExperiments(username, password)
+    chromeExperimentCollector.getExperiments(username, password)
 
     print("=== Step 2: Updating expiration times ===")
     getCSVExperimentInfo.getCSVExperimentsExpireTimes()
