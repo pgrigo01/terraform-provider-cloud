@@ -292,12 +292,15 @@ def run_server():
 # -------------------------------------------------------------------
 # Main Entry Point
 # -------------------------------------------------------------------
-def runChromeServer():
+def runChromeServer(username=None, password=None):
+    if username is None or password is None:
+        username, password = get_credentials()
     global global_username, global_password
-    global_username, global_password = get_credentials()
+    global_username, global_password = username, password
     initialize_experiments(global_username, global_password)
     setup_scheduler(global_username, global_password)
     run_server()
+
 
 if __name__ == '__main__':  
     #os.environ["FLASK_ENV"] = "development"

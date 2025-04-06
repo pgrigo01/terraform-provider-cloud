@@ -14,7 +14,7 @@ import CloudLabAPI.src.emulab_sslxmlrpc.client.api as api
 import CloudLabAPI.src.emulab_sslxmlrpc.xmlrpc as xmlrpc
 
 # Local modules used for experiment management and extension
-import firefoxExperimentCollector
+import chromeExperimentCollector
 from algorithmExpExtension import extendAllExperimentsToLast
 
 # --------------------------
@@ -266,7 +266,7 @@ def get_credentials():
 
 def initialize_experiments(username, password):
     app.logger.info("Initializing experiments at startup...")
-    firefoxExperimentCollector.getExperiments(username, password)
+    chromeExperimentCollector.getExperiments(username, password)
 
 def setup_scheduler(username, password):
    
@@ -274,7 +274,7 @@ def setup_scheduler(username, password):
 
     def scheduled_experiment_collector():
         app.logger.info("Running scheduled experimentCollector...")
-        firefoxExperimentCollector.getExperiments(username, password)
+        chromeExperimentCollector.getExperiments(username, password)
 
     # Schedule experiment data refresh every hour.
     scheduler.add_job(func=scheduled_experiment_collector, trigger="interval", hours=1)
@@ -285,6 +285,37 @@ def setup_scheduler(username, password):
     app.logger.info("Scheduler started.")
     return scheduler
 
+
+# # Add this new route to handle terraform commands
+# @app.route('/terraform', methods=['POST'])
+# def terraform_command():
+#     command = request.json.get('command')
+    
+#     # Validate command - only allow specific terraform commands
+#     allowed_commands = ['apply', 'plan', 'destroy', 'init']
+    
+#     if not command or command not in allowed_commands:
+#         return jsonify({"error": "Invalid or unauthorized command"}), 400
+        
+#     try:
+#         # Execute the terraform command
+#         result = subprocess.run(['terraform', command], 
+#                                capture_output=True, 
+#                                text=True, 
+#                                check=False)
+        
+#         return jsonify({
+#             "command": f"terraform {command}",
+#             "stdout": result.stdout,
+#             "stderr": result.stderr,
+#             "returncode": result.returncode
+#         })
+#     except Exception as e:
+#         app.logger.error(f"Error executing terraform command: {str(e)}")
+#         return jsonify({"error": str(e)}), 500
+
+
+
 def run_server():
     port = 8080
     app.run(debug=True, port=port, host='0.0.0.0', use_reloader=False)
@@ -292,16 +323,14 @@ def run_server():
 # -------------------------------------------------------------------
 # Main Entry Point
 # -------------------------------------------------------------------
-def runFirefoxServer():
-    if username is None or password is None:
-        username, password = get_credentials()
-    global global_username, global_password
-    global_username, global_password = username, password
-    initialize_experiments(global_username, global_password)
-    setup_scheduler(global_username, global_password)
+def runChromeServer():
+    # global global_username, global_password
+    # global_username, global_password = get_credentials()
+    # initialize_experiments(global_username, global_password)
+    # setup_scheduler(global_username, global_password)
     run_server()
 
 if __name__ == '__main__':  
     #os.environ["FLASK_ENV"] = "development"
     os.environ["FLASK_ENV"] = "info"
-    runFirefoxServer()
+    runChromeServer()
