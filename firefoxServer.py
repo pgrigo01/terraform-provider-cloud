@@ -292,7 +292,7 @@ def run_server():
 # -------------------------------------------------------------------
 # Main Entry Point
 # -------------------------------------------------------------------
-def runFirefoxServer():
+def runFirefoxServer(username=None, password=None):
     if username is None or password is None:
         username, password = get_credentials()
     global global_username, global_password

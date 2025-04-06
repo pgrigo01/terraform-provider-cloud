@@ -66,8 +66,10 @@ def main():
             sys.exit(1)
 
     elif choice == '2':
+        username = input("Enter CloudLab username: ").strip()
+        password = getpass.getpass("Enter CloudLab password: ").strip()
         print("Starting Firefox Server...")
-        server_thread = Thread(target=firefoxServer.runFirefoxServer, daemon=True)
+        server_thread = Thread(target=firefoxServer.runFirefoxServer, args=(username, password), daemon=True)
         server_thread.start()
         print("Waiting for the Flask server to start...")
         if wait_for_server("127.0.0.1", 8080):
