@@ -32,12 +32,8 @@ def helper():
         elif cmd.lower().startswith("terraform "):
             terraform_cmd = cmd.split(" ", 1)[1]
             try:
-                result = subprocess.run(["terraform", terraform_cmd],
-                                        capture_output=True,
-                                        text=True)
-                print(result.stdout)
-                if result.stderr:
-                    print("Error:", result.stderr)
+                # Run terraform command interactively so that prompts are visible
+                subprocess.run(["terraform", terraform_cmd])
             except Exception as e:
                 print(f"Error executing command: {str(e)}")
         else:
