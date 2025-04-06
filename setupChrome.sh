@@ -4,6 +4,7 @@
 #sudo apt update
 #sudo apt install python3-venv
 #sudo apt install python3-pip
+sudo apt update
 pip install flask
 
 python3 -m venv myenv
