@@ -10,8 +10,6 @@ python3 -m venv myenv
 source myenv/bin/activate
 #sudo apt install python3-pip
 
-
-
 sudo apt install python3-pip
 # Ensure pip is installed and upgrade it
 python -m ensurepip --upgrade

@@ -1,3 +1,23 @@
+#When changing versions run:
+# terraform init -upgrade 
+
+#If first time run : terraform init 
+#If you want to see the changes in the plan  run: terraform plan 
+#If you want to apply the plan run: terraform apply 
+
+# RESOURCE BLOCKS EXPLAINED
+# cloudlab_openstack_experiment have openstack storage options and also have a shared file system between experiments 
+# on the same cluster,which is persistent too for example on emulab it is under /proj/UCY-CS499-DC/ 100GB of shared storage
+#  USE: df -h on node to find the 100GB of shared storage under /proj/ directory in all clusters, anything you add there will remain.
+
+# cloudlab_simple_experiment has the option to create a node-local-dataset which is not persistent and will be deleted when the node is terminated this is
+# called extra-disk-space is essentialy a Node-Local-Dataset.
+# A Node-Local-Dataset is stored on the local disk of the node and will be deleted when the node is terminated.(not persistent).This is
+# useful if you know you need more storage for an experiment but you don't have to keep it later on.
+
+# In general if you dont need a shared file system between experiments on the same cluster use cloudlab_simple_experiment since it is easiet to define.
+
+
 
 # CloudLab provider configuration, specifying the path to the credentials file and API endpoint
 terraform {
@@ -13,6 +33,10 @@ provider "cloudlab" {
   project          = "UCY-CS499-DC"
   credentials_path = "cloudlab-decrypted.pem"
 }
+
+
+# Uncomment the following Resource Blocks  and run terraform applyto see the experiments starting
+# Comment back later  if you want to terminate them and run terraform apply again
 
 # # # # Openstack experiment with 1 node in a specific cluster (winsconstin) and a specific node type (c220g1)
 
@@ -52,10 +76,10 @@ provider "cloudlab" {
 #   image        = "UBUNTU 24.04"
 #   aggregate    = "emulab.net"
 #   extra_disk_space = 300 # added option to ask for a 300GB local file system mounted at /mydata --> see with command: df -h only accessible within the experiment
-#   node_count = 3 #nodes that are on the same experiment
+#   node_count = 1 #nodes that are on the same experiment
 # }
 
-# # # # This cloudlab_simple_experiment resource creates 1 node on an experiment without a node-local-dataset and is allocated in utah.cloudlab.us cluster
+# # # # This cloudlab_simple_experiment resource creates 2 nodes on an experiment with a node-local-dataset of 50GB  and is allocated in emulab.net cluster
 
 # resource "cloudlab_simple_experiment" "uthaexperiment1" {
 #   name         = "uthaexperiment1"
