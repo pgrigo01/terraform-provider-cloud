@@ -19,25 +19,22 @@ def wait_for_server(host, port, timeout=30):
     return False
 
 def helper():
-    # Command loop
     print("\n=== Command Interface ===")
     print("Available commands:")
-    print("- terraform <command> : Run terraform command (apply, plan, destroy, etc)")
-    print("- exit : Quit the application")
+    print("terraform <command> : Run terraform command (apply, plan, destroy, etc)")
+    print("exit                : Quit the application")
+    print("You can also run any other command directly.")
+    
     while True:
-        cmd = input("\n> ")
+        cmd = input("\n> ").strip()
         if cmd.lower() == "exit":
             print("Exiting...")
             sys.exit(0)
-        elif cmd.lower().startswith("terraform "):
-            terraform_cmd = cmd.split(" ", 1)[1]
-            try:
-                # Run terraform command interactively so that prompts are visible
-                subprocess.run(["terraform", terraform_cmd])
-            except Exception as e:
-                print(f"Error executing command: {str(e)}")
-        else:
-            print("Unknown command")
+        try:
+            # Run any command using shell=True so interactive commands work.
+            subprocess.run(cmd, shell=True)
+        except Exception as e:
+            print(f"Error executing command: {e}")
 
 def main():
     print("Select the browser server to run:")
