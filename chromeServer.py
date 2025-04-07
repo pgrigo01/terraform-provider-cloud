@@ -143,7 +143,7 @@ def startExperiment():
         if exitval == 0:
             break
         else:
-            app.logger.warning(
+            app.logger.info(
                 f"startExperiment attempt {attempt} failed with exitval={exitval}. Retrying in {retry_delay} seconds..."
             )
             time.sleep(retry_delay)
@@ -161,7 +161,7 @@ def startExperiment():
             cloudlab_uuid = parse_uuid_from_response(str(status_response))
             app.logger.info(f"Parsed UUID from experimentStatus: '{cloudlab_uuid}'")
         else:
-            app.logger.warning("experimentStatus call failed. Storing 'unknown' for UUID.")
+            app.logger.info("experimentStatus call failed. Storing 'unknown' for UUID.")
             cloudlab_uuid = "unknown"
     if not cloudlab_uuid:
         cloudlab_uuid = "unknown"
