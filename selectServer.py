@@ -1,3 +1,13 @@
+#Run this script to start the server.
+# source myenv/bin/activate
+# python3 selectServer.py
+
+#In case the server remains running, we can kill it using the following command:
+# lsof -i :8080 to see the process using port 8080
+# kill -9 <PID> to kill the process using port 8080
+#Then you can rerun the script.
+
+
 import getpass
 import os
 import sys
@@ -78,3 +88,5 @@ def main():
         os._exit(0)  # Force kill everything, including Flask running in thread
 if __name__ == "__main__":
     main()
+
+

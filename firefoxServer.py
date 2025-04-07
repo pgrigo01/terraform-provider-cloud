@@ -244,7 +244,7 @@ def terminateExperiment():
         if exitval == 0:
             break
         else:
-            app.logger.warning(
+            app.logger.info(
                 f"terminateExperiment attempt {attempt} failed with exitval={exitval}. Retrying in {retry_delay} seconds..."
             )
             time.sleep(retry_delay)
