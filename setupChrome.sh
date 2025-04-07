@@ -4,20 +4,20 @@
 #sudo apt update
 #sudo apt install python3-venv
 #sudo apt install python3-pip
-sudo apt update
 pip install flask
 
-python3 -m venv myenv
 source myenv/bin/activate
 #sudo apt install python3-pip
 
+
+
 sudo apt install python3-pip
 # Ensure pip is installed and upgrade it
-python -m ensurepip --upgrade
-pip install --upgrade pip
+# python -m ensurepip --upgrade
+# pip install --upgrade pip
 
 # Install required packages
-#pip install firebase_admin
+
 pip install flask
 
 # Download and install Google Chrome
