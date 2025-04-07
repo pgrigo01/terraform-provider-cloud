@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Activate the virtual environment
-#sudo apt update
+sudo apt update
 #sudo apt install python3-venv
 #sudo apt install python3-pip
 pip install flask
