@@ -20,7 +20,7 @@ provider "cloudlab" {
 #   name               = "experiment1"
 #   release            = "zed" # zed is the most recent in this profile: ubuntu 22.04 you can visit the profile to see available releases https://www.cloudlab.us/show-profile.php?uuid=f661a302-e5a7-11e7-b179-90e2ba22fee4 `
 #   compute_node_count = 0
-#   os_node_type       = "c220g1"   # default:"" is emulab. see node-type.txt for more or visit https://www.cloudlab.us/resinfo.php to see available node types 
+#   os_node_type       = ""   # default:"" is emulab. see node-type.txt for more or visit https://www.cloudlab.us/resinfo.php to see available node types 
 #   ml2plugin          = "openvswitch"
 #   extra_image_urls   = ""
 # }
@@ -32,7 +32,7 @@ provider "cloudlab" {
 #   name               = "experiment2"
 #   release            = "zed" 
 #   compute_node_count = 0
-#   os_node_type       = "c220g5"   # default:"" is Any available node. see node-type.txt for more or visit https://www.cloudlab.us/resinfo.php to see available node types 
+#   os_node_type       = ""   # default:"" is Any available node. see node-type.txt for more or visit https://www.cloudlab.us/resinfo.php to see available node types 
 #   ml2plugin          = "openvswitch"
 #   extra_image_urls   = ""
 # }

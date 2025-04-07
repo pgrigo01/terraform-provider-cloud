@@ -21,7 +21,9 @@ from algorithmExpExtension import extendAllExperimentsToLast
 # Flask App and Logger Setup
 # --------------------------
 app = Flask(__name__)
-app.logger.setLevel('INFO')
+# app.logger.setLevel('INFO')
+app.logger.setLevel('WARNING')
+
 
 # --------------------------
 # Error / Status Constants
