@@ -2,8 +2,7 @@
 
 # Activate the virtual environment
 sudo apt update
-#sudo apt install python3-venv
-#sudo apt install python3-pip
+
 pip install flask
 
 source myenv/bin/activate
@@ -20,7 +19,8 @@ sudo apt install python3-pip
 
 pip install flask
 
-# Download and install Google Chrome
+# Download and install Google Chrome 
+echo "Installing Google Chrome this may take a while..."
 wget -q -O google-chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
 sudo apt install -y ./google-chrome.deb
 rm google-chrome.deb
