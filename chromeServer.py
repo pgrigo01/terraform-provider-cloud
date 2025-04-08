@@ -195,7 +195,7 @@ def experimentStatus():
         app.logger.info(f"Attempt {attempt}/{max_retries}, exitval={exitval}, response={response}")
         if response is not None and hasattr(response, 'output'):
             return (str(response.output), ERRORMESSAGES[exitval][1])
-        app.logger.warning(
+        app.logger.info(
             f"experimentStatus attempt {attempt} did not return a valid response. Retrying in {retry_delay} second(s)..."
         )
         time.sleep(retry_delay)

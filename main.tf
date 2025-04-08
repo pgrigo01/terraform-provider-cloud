@@ -54,26 +54,36 @@ resource "cloudlab_simple_experiment" "emulabexp1" {
   extra_disk_space = 0 # added option to ask for a 300GB local file system mounted at /mydata --> see with command: df -h only accessible within the experiment
   node_count = 1 #nodes that are on the same experiment
 }
+resource "cloudlab_simple_experiment" "emulabexp2" {
+  name         = "emulabexp2"
+  routable_ip  = true
+  image        = "UBUNTU 24.04"
+  aggregate    = "emulab.net"
+  extra_disk_space = 0 # added option to ask for a 300GB local file system mounted at /mydata --> see with command: df -h only accessible within the experiment
+  node_count = 1 #nodes that are on the same experiment
+}
+
+
 
 
 # # # # This cloudlab_simple_experiment resource creates 1 node on an experiment without a node-local-dataset and is allocated in utah.cloudlab.us cluster
 
-resource "cloudlab_simple_experiment" "uthaexperiment1" {
-  name         = "uthaexperiment1"
-  routable_ip  = true
-  image        = "UBUNTU 22.04"
-  aggregate    = "utah.cloudlab.us"
-  node_count = 1
-}
+# resource "cloudlab_simple_experiment" "uthaexperiment1" {
+#   name         = "uthaexperiment1"
+#   routable_ip  = true
+#   image        = "UBUNTU 22.04"
+#   aggregate    = "utah.cloudlab.us"
+#   node_count = 1
+# }
 
 # # # This cloudlab_simple_experiment resource creates 1 node on an experiment without a node-local-dataset and is allocated in wisc.cloudlab.us cluster
 
-# resource "cloudlab_simple_experiment" "wiscexperiment1" {
-#   name         = "wiscexperiment1"
-#   routable_ip  = true
-#   image        = "UBUNTU 24.04"
-#   aggregate    = "wisc.cloudlab.us"
-# }
+resource "cloudlab_simple_experiment" "wiscexperiment1" {
+  name         = "wiscexperiment1"
+  routable_ip  = true
+  image        = "UBUNTU 24.04"
+  aggregate    = "wisc.cloudlab.us"
+}
 
 
 
