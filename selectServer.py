@@ -17,6 +17,7 @@ import socket
 from threading import Thread
 import chromeServer
 import firefoxServer
+import simpleServer
 
 def wait_for_server(host, port, timeout=90):
     """Wait until a TCP connection to host:port can be made or timeout."""
@@ -55,7 +56,8 @@ def main():
         print("Select the browser server to run:")
         print("1. Chrome Server")
         print("2. Firefox Server")
-        choice = input("Enter your choice (1 or 2): ").strip()
+        print("3. Run Server without authentication")
+        choice = input("Enter your choice (1, 2 or 3): ").strip()
 
         if choice == '1':
             username = input("Enter CloudLab username: ").strip()
@@ -69,8 +71,11 @@ def main():
             print("Starting Firefox Server...")
             server_thread = Thread(target=firefoxServer.runFirefoxServer, args=(username, password), daemon=True)
             server_thread.start()
+        elif choice == '3':
+            server_thread = Thread(target=simpleServer.runSimpleServer, daemon=True)
+            server_thread.start()
         else:
-            print("Invalid choice. Please enter 1 or 2.")
+            print("Invalid choice. Please enter 1, 2 or 3. ")
             sys.exit(1)
 
         print("Waiting for the Flask server to start...")

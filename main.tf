@@ -46,25 +46,25 @@ provider "cloudlab" {
 
 # # # This cloudlab_simple_experiment resource creates 3 nodes on an experiment that has a node-local-dataset of 50GB  and is allocated in emulab.net cluster
 
-# resource "cloudlab_simple_experiment" "emulabexp1" {
-#   name         = "emulabexp1"
-#   routable_ip  = true
-#   image        = "UBUNTU 24.04"
-#   aggregate    = "emulab.net"
-#   extra_disk_space = 300 # added option to ask for a 300GB local file system mounted at /mydata --> see with command: df -h only accessible within the experiment
-#   node_count = 3 #nodes that are on the same experiment
-# }
+resource "cloudlab_simple_experiment" "emulabexp1" {
+  name         = "emulabexp1"
+  routable_ip  = true
+  image        = "UBUNTU 24.04"
+  aggregate    = "emulab.net"
+  extra_disk_space = 0 # added option to ask for a 300GB local file system mounted at /mydata --> see with command: df -h only accessible within the experiment
+  node_count = 1 #nodes that are on the same experiment
+}
 
 
 # # # # This cloudlab_simple_experiment resource creates 1 node on an experiment without a node-local-dataset and is allocated in utah.cloudlab.us cluster
 
-# resource "cloudlab_simple_experiment" "uthaexperiment1" {
-#   name         = "uthaexperiment1"
-#   routable_ip  = true
-#   image        = "UBUNTU 22.04"
-#   aggregate    = "utah.cloudlab.us"
-#   node_count = 1
-# }
+resource "cloudlab_simple_experiment" "uthaexperiment1" {
+  name         = "uthaexperiment1"
+  routable_ip  = true
+  image        = "UBUNTU 22.04"
+  aggregate    = "utah.cloudlab.us"
+  node_count = 1
+}
 
 # # # This cloudlab_simple_experiment resource creates 1 node on an experiment without a node-local-dataset and is allocated in wisc.cloudlab.us cluster
 
@@ -74,4 +74,6 @@ provider "cloudlab" {
 #   image        = "UBUNTU 24.04"
 #   aggregate    = "wisc.cloudlab.us"
 # }
+
+
 
