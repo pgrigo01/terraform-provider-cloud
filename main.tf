@@ -14,9 +14,9 @@ provider "cloudlab" {
   credentials_path = "cloudlab-decrypted.pem"
 }
 
-resource "cloudlab_simple_experiment" "vm1"{
-    name = "experiment1"
-    routable_ip = true
-    image        = "UBUNTU 22.04"
-    aggregate    = "emulab.net"
-}
+# resource "cloudlab_simple_experiment" "vm1"{
+#     name = "experiment1"
+#     routable_ip = true
+#     image        = "UBUNTU 22.04"
+#     aggregate    = "emulab.net"
+# }
