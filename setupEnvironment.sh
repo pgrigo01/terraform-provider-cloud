@@ -21,7 +21,13 @@ sudo apt install -y "$VENV_PACKAGE"
 # Create virtual environment
 echo "Creating virtual environment: myenv"
 python3 -m venv myenv
-pip install -r requirements.txt
+source myenv/bin/activate
+# pip install -r requirements.txt
+pip install apscheduler
+pip install flask
+pip install pandas
+pip install selenium
+pip install webdriver-manager
 
 if [ $? -eq 0 ]; then
     echo "Virtual environment created successfully in ./myenv"
