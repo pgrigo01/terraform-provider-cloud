@@ -116,8 +116,10 @@ def startExperiment():
     errVal, errCode = err
     if errCode != 200:
         return err
+
     file, params = args
     if 'proj' not in params or 'profile' not in params:
+        app.logger.error("Project and/or profile param not provided")
         return "Project and/or profile param not provided", 400
 
     config = {
@@ -128,29 +130,45 @@ def startExperiment():
     }
     app.logger.info(f"Server configuration: {config}")
     server = xmlrpc.EmulabXMLRPC(config)
+
     if 'bindings' in params and isinstance(params['bindings'], dict):
         params['bindings'] = dict_to_json(params['bindings'])
-    app.logger.info(f"Experiment parameters!!!: {params}")
+    app.logger.info(f"Experiment parameters: {params}")
 
-    max_retries = 5
-    retry_delay = 3
+    ###########################
+    # Phase 1: Start Experiment
+    ###########################
+    max_retries_start = 3
+    retry_delay_start = 5  # seconds
     exitval, response = None, None
-    for attempt in range(1, max_retries + 1):
-        #print(params)
-        (exitval, response) = api.startExperiment(server, params).apply()
-        app.logger.info(f"startExperiment attempt {attempt}/{max_retries}: exitval={exitval}, response={response}")
-        if exitval == 0:
-            break
+
+    for attempt in range(1, max_retries_start + 1):
+        try:
+            exitval, response = api.startExperiment(server, params).apply()
+        except Exception as e:
+            app.logger.error(f"Exception during startExperiment on attempt {attempt}: {e}", exc_info=True)
+            exitval = -1
+            response = None
+
+        app.logger.info(f"startExperiment attempt {attempt}/{max_retries_start}: exitval={exitval}, response={response}")
+
+        # Retry only if exitval is -1
+        if exitval == -1 and attempt < max_retries_start:
+            app.logger.warning(f"Received exitval=-1. Retrying startExperiment in {retry_delay_start} seconds...")
+            time.sleep(retry_delay_start)
         else:
-            app.logger.info(
-                f"startExperiment attempt {attempt} failed with exitval={exitval}. Retrying in {retry_delay} seconds..."
-            )
-            time.sleep(retry_delay)
+            break
+
+    # Check that the experiment actually started successfully (exit code 0)
     if exitval != 0:
-        app.logger.error("All attempts to start experiment failed.")
-        return ERRORMESSAGES.get(exitval, ERRORMESSAGES[RESPONSE_ERROR])
+        error_message = ERRORMESSAGES.get(exitval, ERRORMESSAGES.get(RESPONSE_ERROR, "Experiment start failed"))
+        # If error_message is a tuple (e.g., containing both message and code), extract only the string part.
+        if isinstance(error_message, tuple):
+            error_message = error_message[0]
+        app.logger.error("Experiment start did not succeed. " + error_message)
+        return error_message, 500
     cloudlab_uuid = parse_uuid_from_response(str(response))
-    app.logger.info(f"Parsed UUID from startExperiment: '{cloudlab_uuid}'")
+    
     if not cloudlab_uuid:
         app.logger.info("Could not parse UUID from startExperiment. Checking experimentStatus for the real UUID...")
         status_params = {'proj': params['proj'], 'experiment': f"{params['proj']},{params['name']}"}
