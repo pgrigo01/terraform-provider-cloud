@@ -2,9 +2,9 @@
 
 # Activate the virtual environment
 sudo apt update
-python3 -m venv myenv
+#python3 -m venv myenv
 
-source myenv/bin/activate
+#source myenv/bin/activate
 #sudo apt install python3-pip
 sudo apt install python3.12-venv
 
@@ -23,4 +23,4 @@ wget -q -O google-chrome.deb https://dl.google.com/linux/direct/google-chrome-st
 sudo apt install -y ./google-chrome.deb
 rm google-chrome.deb
 
-pip install -r requirements.txt
+#pip install -r requirements.txt
