@@ -128,6 +128,7 @@ def startExperiment():
         params['bindings'] = dict_to_json(params['bindings'])
     app.logger.info(f"Experiment parameters!!!: {params}")
 
+    # Previous retry logic causing duplicate calls: 
     max_retries = 5
     retry_delay = 3
     exitval, response = None, None
@@ -147,20 +148,6 @@ def startExperiment():
         return ERRORMESSAGES.get(exitval, ERRORMESSAGES[RESPONSE_ERROR])
     cloudlab_uuid = parse_uuid_from_response(str(response))
     app.logger.info(f"Parsed UUID from startExperiment: '{cloudlab_uuid}'")
-    if not cloudlab_uuid:
-        app.logger.info("Could not parse UUID from startExperiment. Checking experimentStatus for the real UUID...")
-        status_params = {'proj': params['proj'], 'experiment': f"{params['proj']},{params['name']}"}
-        (status_exitval, status_response) = api.experimentStatus(server, status_params).apply()
-        app.logger.info(f"experimentStatus exitval={status_exitval}, response={status_response}")
-        if status_exitval == 0:
-            cloudlab_uuid = parse_uuid_from_response(str(status_response))
-            app.logger.info(f"Parsed UUID from experimentStatus: '{cloudlab_uuid}'")
-        else:
-            app.logger.info("experimentStatus call failed. Storing 'unknown' for UUID.")
-            cloudlab_uuid = "unknown"
-    if not cloudlab_uuid:
-        cloudlab_uuid = "unknown"
-    app.logger.info(f"Experiment '{params.get('name', 'unnamed')}' started with UUID '{cloudlab_uuid}'.")
     return ERRORMESSAGES.get(exitval, ERRORMESSAGES[RESPONSE_ERROR])
 
 @app.route('/experiment', methods=['GET'])
@@ -265,3 +252,6 @@ if __name__ == '__main__':
     #os.environ["FLASK_ENV"] = "development"
     os.environ["FLASK_ENV"] = "info"
     runSimpleServer()
+
+
+
