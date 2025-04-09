@@ -15,7 +15,7 @@ provider "cloudlab" {
 }
 
 resource "cloudlab_simple_experiment" "vm1"{
-    name = "experiment6"
+    name = "experiment1"
     routable_ip = true
     image        = "UBUNTU 22.04"
     aggregate    = "emulab.net"
