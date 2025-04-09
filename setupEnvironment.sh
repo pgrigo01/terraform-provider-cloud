@@ -31,7 +31,11 @@ pip install webdriver-manager
 
 if [ $? -eq 0 ]; then
     echo "Virtual environment created successfully in ./myenv"
+    echo "To activate the virtual environment, run:"
+    echo "source myenv/bin/activate"
+    echo "Then run python3 selectServer.py"
 else
     echo "Failed to create virtual environment."
     exit 1
 fi
+
