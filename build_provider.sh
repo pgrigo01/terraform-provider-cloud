@@ -1,19 +1,44 @@
 #!/bin/bash
 # build_and_update.sh
-# This script builds the Terraform provider, updates main.tf with the new version,
+# This script automatically increments the version based on the version in main.tf,
+# builds the Terraform provider, updates main.tf with the new version,
 # removes any existing Terraform state files, installs the new provider binary,
 # and runs "terraform init -upgrade".
 
-echo "REMINDER!!! : Ensure that you have updated the client.go HostURL to the correct endpoint before continuing."
+echo "REMINDER!!!: Ensure that you have updated the client.go HostURL to the correct endpoint before continuing."
 
-# 1. Get version: from argument or prompt user
+# 1. Get version: from argument or auto-increment from main.tf
 if [ -n "$1" ]; then
   version="$1"
 else
-  read -p "Enter version (starting with v, e.g., v2.5.2): " version
+  if [ -f main.tf ]; then
+    # Extract the first occurrence of a version in the pattern "X.Y.Z"
+    current_version=$(grep -E 'version *= *"[0-9]+\.[0-9]+\.[0-9]+"' main.tf | head -1 | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')
+    if [ -z "$current_version" ]; then
+      echo "❌ Error: Could not extract a valid version from main.tf."
+      exit 1
+    fi
+
+    # Split the version into major, minor, and patch components
+    IFS='.' read -r major minor patch <<< "$current_version"
+
+    # Auto-increment logic:
+    # If the patch is 9, bump the minor version and set patch to 0 (e.g., v5.0.9 -> v5.1.0)
+    if [ "$patch" -eq 9 ]; then
+      minor=$((minor + 1))
+      patch=0
+    else
+      patch=$((patch + 1))
+    fi
+    version="v${major}.${minor}.${patch}"
+    echo "Auto-incremented version: ${version}"
+  else
+    echo "❌ Error: main.tf not found. Please provide a version as an argument."
+    exit 1
+  fi
 fi
 
-# 2. Validate the version format
+# 2. Validate version format (must start with 'v')
 if [[ $version != v* ]]; then
   echo "❌ Error: Version must start with 'v' (e.g., v2.5.2)."
   exit 1
