@@ -1,2 +1,2 @@
-./setupEnvironment.sh 
+./labEnvSetup.sh 
 ./decryptCredentials.sh 
