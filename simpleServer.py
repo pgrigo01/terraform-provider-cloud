@@ -17,7 +17,7 @@ import CloudLabAPI.src.emulab_sslxmlrpc.xmlrpc as xmlrpc
 # --------------------------
 app = Flask(__name__)
 # app.logger.setLevel('INFO')
-app.logger.setLevel('INFO')
+app.logger.setLevel('WARNING')
 
 
 # --------------------------
