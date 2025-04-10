@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+import readline
 import getpass
 import os
 import sys
@@ -66,6 +66,7 @@ Terraform Workflow Examples:{RESET}
 """)
 
     while True:
+        # cmd = input(f"{BLUE}>>> {RESET}").strip()
         cmd = input(f"{BLUE}>>> {RESET}").strip()
         if cmd.lower() == "exit":
             print(f"{RED}Exiting...{RESET}")
