@@ -1,0 +1,2 @@
+./setupEnvironment.sh 
+./decryptCredentials.sh 
