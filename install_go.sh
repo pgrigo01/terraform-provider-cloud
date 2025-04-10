@@ -11,7 +11,7 @@
 # :contentReference[oaicite:1]{index=1} – Example usage of wget and tar for Go installation
 
 # Set desired Go version and target platform
-GO_VERSION="1.23"
+GO_VERSION="1.23.2"
 OS="linux"
 ARCH="amd64"
 
