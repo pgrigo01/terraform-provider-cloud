@@ -27,6 +27,7 @@ terraform.tfstate.backup
 terraform-provider-cloudlab
 
 cloudlab_experiments.csv
+cloudlab.pem
 
 managementNodeDuration.txt
 
