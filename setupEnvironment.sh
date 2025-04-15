@@ -28,6 +28,9 @@ pip install flask
 pip install pandas
 pip install selenium
 pip install webdriver-manager
+pip intall cryptography
+
+#python3 cry.py
 
 if [ $? -eq 0 ]; then
     echo "Virtual environment created successfully in ./myenv"

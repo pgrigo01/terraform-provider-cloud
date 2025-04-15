@@ -12,6 +12,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from flask import Flask, request, jsonify, Request
 import CloudLabAPI.src.emulab_sslxmlrpc.client.api as api
 import CloudLabAPI.src.emulab_sslxmlrpc.xmlrpc as xmlrpc
+from cryptography.fernet import Fernet  # Added import for decryption
 
 # Local modules used for experiment management and extension
 import chromeExperimentCollector
@@ -220,7 +221,6 @@ def experimentStatus():
     return ("No valid status after multiple retries", 500)
 
 @app.route('/experiment', methods=['DELETE'])
-@app.route('/experiment', methods=['DELETE'])
 def terminateExperiment():
     app.logger.info("terminateExperiment")
     args, err = parseArgs(request)
@@ -276,6 +276,42 @@ def terminateExperiment():
 # -------------------------------------------------------------------
 # Methods for Main Setup
 # -------------------------------------------------------------------
+def load_encrypted_credentials():
+    """Load and decrypt credentials from the encrypted file"""
+    cred_file = "credentials.encrypted"
+    key_file = "encryption_key.key"
+    
+    if not os.path.exists(cred_file) or not os.path.exists(key_file):
+        app.logger.error(f"Encrypted credentials not found. Please run cry.py first.")
+        return None, None
+        
+    # Load the encryption key
+    with open(key_file, "rb") as f:
+        key = f.read()
+    
+    # Create cipher for decryption
+    cipher = Fernet(key)
+    
+    # Read and decrypt credentials
+    try:
+        with open(cred_file, "rb") as f:
+            lines = f.readlines()
+            if len(lines) < 2:
+                app.logger.error("Invalid credentials file format")
+                return None, None
+                
+            encrypted_username = lines[0].strip()
+            encrypted_password = lines[1].strip()
+            
+        username = cipher.decrypt(encrypted_username).decode()
+        password = cipher.decrypt(encrypted_password).decode()
+        
+        app.logger.info("Successfully loaded encrypted credentials")
+        return username, password
+    except Exception as e:
+        app.logger.error(f"Error decrypting credentials: {e}")
+        return None, None
+
 def get_credentials():
     username = input("Enter CloudLab username: ").strip()
     password = getpass.getpass("Enter CloudLab password: ").strip()
@@ -289,7 +325,6 @@ def initialize_experiments(username, password):
     chromeExperimentCollector.getExperiments(username, password)
 
 def setup_scheduler(username, password):
-   
     scheduler = BackgroundScheduler()
 
     def scheduled_experiment_collector():
@@ -314,9 +349,18 @@ def run_server():
 # -------------------------------------------------------------------
 def runChromeServer(username=None, password=None):
     if username is None or password is None:
-        username, password = get_credentials()
+        # Try to get credentials from encrypted file first
+        username, password = load_encrypted_credentials()
+        
+        # Fall back to manual input if decryption fails
+        if username is None or password is None:
+            app.logger.info("Falling back to manual credential entry")
+            username, password = get_credentials()
+    
     global global_username, global_password
     global_username, global_password = username, password
+    
+    app.logger.info(f"Initializing server with username: {username}")
     initialize_experiments(global_username, global_password)
     setup_scheduler(global_username, global_password)
     run_server()

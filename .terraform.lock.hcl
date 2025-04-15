@@ -2,9 +2,9 @@
 # Manual edits may be lost in future updates.
 
 provider "registry.terraform.io/pgrigo01/cloudlab" {
-  version     = "5.0.1"
-  constraints = "5.0.1"
+  version     = "5.0.2"
+  constraints = "5.0.2"
   hashes = [
-    "h1:SyZTNZzEuB3ajJpUg3jYEBzEvDeMRgGDZHgoAtT5krk=",
+    "h1:JN1ASWxjH/wHyTeV26smzuDx05tSj7E5zeEKj06cJGk=",
   ]
 }

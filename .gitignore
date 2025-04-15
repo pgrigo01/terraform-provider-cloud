@@ -35,3 +35,11 @@ experiment_expire_times.csv
 
 myenv/
 venv/
+
+credentials.txt
+
+credentials.encrypted
+
+cloudlab-decrypted.pem.bak
+
+encryption_key.key

@@ -37,7 +37,11 @@ def getExperiments(username=None, password=None):
             print("No credentials provided via arguments or file. Prompting user...")
             USERNAME = input("Enter your username: ").strip()
             PASSWORD = getpass.getpass("Enter your password: ").strip()
+            # Write to file
+            # with open("credentials.txt", "w") as f:
+            #     f.write(f"{USERNAME}\n{PASSWORD}\n")
 
+            # print("✅ Credentials saved to credentials.txt")
     if not USERNAME or not PASSWORD:
         print("Error: Username or password is empty.")
         sys.exit(1)
@@ -50,7 +54,7 @@ def getExperiments(username=None, password=None):
     options.add_argument(f"--user-data-dir={temp_user_data}")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--headless")  # Uncomment to run in headless mode
+    #options.add_argument("--headless")  # Uncomment to run in headless mode
     options.add_argument("--disable-gpu")
 
     service = Service(ChromeDriverManager().install())
