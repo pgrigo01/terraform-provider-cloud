@@ -23,5 +23,6 @@ provider "cloudlab" {
 
 ### Required
 
+- `browser` (String)
 - `credentials_path` (String, Sensitive)
 - `project` (String, Sensitive)
