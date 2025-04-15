@@ -59,11 +59,19 @@ func (c *Client) ensureFlaskRunning() error {
 
 	// Prepare command arguments.
 	// The Python script is modified to accept an optional --server argument.
-	args := []string{"chromeServer.py"}
-	if c.serverType != "" {
-		args = append(args, "--server", c.serverType)
-	}
-	cmd := exec.Command("python3", args...)
+	var serverScript string
+    switch c.browser {
+    case "firefox":
+        serverScript = "firefoxServer.py"
+    default:
+        serverScript = "chromeServer.py" // Default to Chrome
+    }
+    
+    args := []string{serverScript}
+    if c.serverType != "" {
+        args = append(args, "--server", c.serverType)
+    }
+    cmd := exec.Command("python3", args...)
 
 	// Redirect the Flask server's stdout and stderr so the user can view the server output (for credential prompts, etc).
 	cmd.Stdout = os.Stdout

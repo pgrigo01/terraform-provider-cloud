@@ -4,7 +4,7 @@ terraform {
   required_providers {
     cloudlab = {
       source  = "pgrigo01/cloudlab" # this directory is under the .terraform directory
-      version = "5.0.1" 
+      version = "5.0.3" 
       
     }
   }
@@ -13,7 +13,8 @@ terraform {
 provider "cloudlab" {
   project          = "UCY-CS499-DC"
   credentials_path = "cloudlab-decrypted.pem"
-  browser= "chrome"
+  browser= "firefox"
+  # browser= "chrome"
 }
 
 
@@ -32,3 +33,9 @@ provider "cloudlab" {
 #     aggregate    = "emulab.net"
 # }
 
+resource "cloudlab_simple_experiment" "experiment3"{
+    name = "experiment3"
+    routable_ip = true
+    image        = "UBUNTU 22.04"
+    aggregate    = "emulab.net"
+}
