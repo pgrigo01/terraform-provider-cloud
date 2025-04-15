@@ -8,7 +8,7 @@ pip install flask
 pip install pandas
 pip install selenium
 pip install webdriver-manager
-
+pip install cryptography
 if [ $? -eq 0 ]; then
     echo "Virtual environment created successfully in ./myenv"
     echo "To activate the virtual environment, run:"
