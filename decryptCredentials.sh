@@ -37,14 +37,11 @@ echo
 if [[ ! -f $CREDS_FILE || ! -f $KEY_FILE ]]; then
     echo "ℹ️ Encrypted credentials not found. Running encrypt.py to create them..."
     
-    # Run encrypt.py with input provided via pipe
-    echo "Using your certificate password for CloudLab authentication..."
-    
-    # Run encrypt.py and provide CloudLab username and password
-    echo -e "$CLOUDLAB_USERNAME\n$PASSWORD" | python3 encrypt.py
+    # Change this line - pass username and password as command line arguments
+    python3 encrypt.py "$CLOUDLAB_USERNAME" "$PASSWORD"
     
     if [ $? -ne 0 ]; then
-        echo "❌ Failed to create encrypted credentials with encrypt,py"
+        echo "❌ Failed to create encrypted credentials with encrypt.py"
         exit 1
     fi
     echo "✅ Encrypted credentials created successfully"
@@ -56,8 +53,11 @@ echo "🔐 Decrypting private key and extracting certificate from $PEM_FILE..."
 openssl x509 -in "$PEM_FILE" > "$OUTPUT_FILE"
 
 # Decrypt RSA key using the stored password and append to output
+# Try different syntax for passing password to OpenSSL
 echo "$PASSWORD" | openssl rsa -in "$PEM_FILE" -passin stdin >> "$OUTPUT_FILE" 2>/dev/null
 
+
+#
 if [ $? -eq 0 ]; then
     echo "✅ Decrypted PEM saved as $OUTPUT_FILE"
     
