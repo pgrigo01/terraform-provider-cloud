@@ -28,7 +28,7 @@ pip install flask
 pip install pandas
 pip install selenium
 pip install webdriver-manager
-pip intall cryptography
+pip install cryptography
 
 #python3 cry.py
 
