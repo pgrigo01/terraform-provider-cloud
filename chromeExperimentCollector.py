@@ -54,7 +54,7 @@ def getExperiments(username=None, password=None):
     options.add_argument(f"--user-data-dir={temp_user_data}")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    #options.add_argument("--headless")  # Uncomment to run in headless mode
+    options.add_argument("--headless")  # Uncomment to run in headless mode
     options.add_argument("--disable-gpu")
 
     service = Service(ChromeDriverManager().install())
