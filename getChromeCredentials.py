@@ -1,3 +1,4 @@
+You said:
 #!/usr/bin/env python3
 import os
 import sys
@@ -53,8 +54,12 @@ def download_certificate(username, password, save_path="."):
     print(f"Downloading CloudLab certificate for {username}...")
     
     options = webdriver.ChromeOptions()
+    temp_user_data = tempfile.mkdtemp()
+    options.add_argument(f"--user-data-dir={temp_user_data}")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--headless")  # Uncomment to run in headless mode
+    options.add_argument("--disable-gpu")
     
     prefs = {
         "download.default_directory": os.path.abspath(save_path),
