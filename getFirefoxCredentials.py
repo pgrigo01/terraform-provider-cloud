@@ -65,8 +65,8 @@ def download_certificate(username, password, save_path="."):
     driver = webdriver.Firefox(service=service, options=options)
 
     
-    service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=options)
+    service = Service(GeckoDriverManager().install())
+    driver = webdriver.Firefox(service=service, options=options)
     
     try:
         driver.get("https://www.cloudlab.us/login.php")
