@@ -107,26 +107,25 @@ def decrypt_certificate(password):
     pem_file = "cloudlab.pem"
     output_file = "cloudlab-decrypted.pem"
     
-    # Check if certificate exists
     if not os.path.exists(pem_file):
         print(f"Error: {pem_file} not found")
         return False
     
-    # Extract certificate
     with open(output_file, "w") as out_file:
-        subprocess.run(["openssl", "x509", "-in", pem_file], stdout=out_file)
+        subprocess.run(
+            ["openssl", "x509", "-in", pem_file,"-passin", f"pass:{password}"],
+            stdout=out_file
+        )
     
-    # Decrypt private key and append to output
     with open(output_file, "a") as out_file:
         process = subprocess.run(
-            ["openssl", "rsa", "-in", pem_file],
-            input=password.encode(),
+            ["openssl", "rsa", "-in", pem_file, "-passin", f"pass:{password}"],
             stdout=out_file,
             stderr=subprocess.PIPE
         )
-        
+    
     if process.returncode != 0:
-        print("Failed to decrypt private key. Invalid password.")
+        print("Failed to decrypt private key. Invalid password or format.")
         os.remove(output_file)
         return False
     
