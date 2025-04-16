@@ -51,52 +51,61 @@ def get_credentials():
 def download_certificate(username, password, save_path="."):
     """Download CloudLab certificate using Selenium"""
     print(f"Downloading CloudLab certificate for {username}...")
-    
+
     options = webdriver.FirefoxOptions()
     temp_user_data = tempfile.mkdtemp()
-    # Disable caching for a cleaner session
+
+    # Set Firefox preferences for downloading to current directory
+    download_dir = os.path.abspath(save_path)
+    options.set_preference("browser.download.folderList", 2)  # Use custom location
+    options.set_preference("browser.download.dir", download_dir)
+    options.set_preference("browser.helperApps.neverAsk.saveToDisk", "application/x-x509-user-cert,application/x-pem-file,application/x-x509-ca-cert,application/x-x509-server-cert")
+    options.set_preference("pdfjs.disabled", True)
+
+    # Disable caching
     options.set_preference("browser.cache.disk.enable", False)
     options.set_preference("browser.cache.memory.enable", False)
     options.set_preference("browser.cache.offline.enable", False)
     options.set_preference("network.http.use-cache", False)
-    options.add_argument("--headless")  # Running in headless mode; comment out to show the browser window
+
+    # Uncomment for headless mode if desired
+    # options.add_argument("--headless")
 
     service = Service(GeckoDriverManager().install())
     driver = webdriver.Firefox(service=service, options=options)
 
-    
-    service = Service(GeckoDriverManager().install())
-    driver = webdriver.Firefox(service=service, options=options)
-    
     try:
         driver.get("https://www.cloudlab.us/login.php")
         wait = WebDriverWait(driver, 10)
-        
+
         username_field = wait.until(EC.presence_of_element_located((By.NAME, "uid")))
         password_field = wait.until(EC.presence_of_element_located((By.NAME, "password")))
         username_field.send_keys(username)
         password_field.send_keys(password)
         login_button = wait.until(EC.element_to_be_clickable((By.ID, "quickvm_login_modal_button")))
         login_button.click()
-        
+
         # Verify login success
         wait.until(EC.element_to_be_clickable((By.ID, "usertab-experiments")))
-        
+
         # Navigate to credentials page
         driver.get("https://www.cloudlab.us/getcreds.php")
-        
+
         # Click the SSL certificate link
         ssl_link = wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(@href, 'getsslcert.php')]")))
         ssl_link.click()
-        
-        # Wait for download
+
+        # Wait for file to finish downloading
         time.sleep(5)
+        print(f"Certificate should be downloaded to: {download_dir}")
         return True
     except Exception as e:
         print(f"Error downloading certificate: {e}")
         return False
     finally:
         driver.quit()
+
+
 
 def decrypt_certificate(password):
     """Decrypt the certificate using OpenSSL"""
