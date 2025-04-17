@@ -5,9 +5,10 @@ import csv
 import math
 from datetime import datetime, timezone
 
-import chromeExperimentCollector
-import getCSVExperimentInfo
-import extendExperiment
+from cloudlab_utils import chromeExperimentCollector
+from cloudlab_utils import firefoxExperimentCollector
+from cloudlab_utils import getCSVExperimentInfo
+from cloudlab_utils import extendExperiment
 
 def parse_expire_time(expire_str):
     """
@@ -44,6 +45,7 @@ def extendAllExperimentsToLast(username, password, hour_threshold=1.0):
     """
     print("=== Step 1: Collecting experiment data ===")
     chromeExperimentCollector.getExperiments(username, password)
+    # firefoxExperimentCollector.getExperiments(username, password)
 
     print("=== Step 2: Updating expiration times ===")
     getCSVExperimentInfo.getCSVExperimentsExpireTimes()

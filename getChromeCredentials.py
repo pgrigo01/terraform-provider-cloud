@@ -13,24 +13,30 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 from cryptography.fernet import Fernet
 
-def get_credentials():
+def get_credentials(force_prompt=False):
     """Get credentials from environment, file, or user prompt"""
-    username = os.environ.get('CLOUDLAB_USERNAME')
-    password = os.environ.get('CLOUDLAB_PASSWORD')
+    username = None
+    password = None
     
-    if not username or not password:
-        if os.path.exists("credentials.txt"):
-            try:
-                with open("credentials.txt", "r") as f:
-                    lines = f.readlines()
-                    if len(lines) >= 2:
-                        username = lines[0].strip()
-                        password = lines[1].strip()
-                print("Using credentials from credentials.txt")
-            except Exception:
-                pass
+    # Only check stored credentials if not forcing a prompt
+    if not force_prompt:
+        username = os.environ.get('CLOUDLAB_USERNAME')
+        password = os.environ.get('CLOUDLAB_PASSWORD')
+        
+        if not username or not password:
+            if os.path.exists("credentials.txt"):
+                try:
+                    with open("credentials.txt", "r") as f:
+                        lines = f.readlines()
+                        if len(lines) >= 2:
+                            username = lines[0].strip()
+                            password = lines[1].strip()
+                    print("Using credentials from credentials.txt")
+                except Exception:
+                    pass
     
-    if not username or not password:
+    # Always prompt if credentials are still missing or force_prompt is True
+    if not username or not password or force_prompt:
         print("Please enter your CloudLab credentials:")
         username = input("Username: ").strip()
         password = getpass.getpass("Password: ").strip()
@@ -38,15 +44,38 @@ def get_credentials():
         # Save for this session
         os.environ['CLOUDLAB_USERNAME'] = username
         os.environ['CLOUDLAB_PASSWORD'] = password
-        
-        # Optionally save to file for future use
-        # save = input("Save credentials for future use? (y/n): ").lower()
-        # if save == 'y':
-        #     with open("credentials.txt", "w") as f:
-        #         f.write(f"{username}\n{password}\n")
-        #     print("Credentials saved to credentials.txt")
     
     return username, password
+
+def main():
+    # Try until successful
+    force_prompt = False
+    success = False
+    
+    while not success:
+        # Get credentials (force prompt if previous attempt failed)
+        username, password = get_credentials(force_prompt)
+        
+        # Check if certificate exists, download if not
+        if not os.path.exists("cloudlab.pem"):
+            print("Certificate not found, downloading...")
+            if download_certificate(username, password):
+                success = True
+            else:
+                print("Failed to download certificate. Incorrect credentials? Try again.")
+                force_prompt = True  # Force prompt on next iteration
+        else:
+            success = True  # Certificate already exists
+    
+    # Decrypt certificate
+    if not decrypt_certificate(password):
+        return 1
+    
+    # Encrypt credentials for future use
+    encrypt_credentials(username, password)
+    
+    print("\nAll credential operations completed successfully!")
+    return 0
 
 def download_certificate(username, password, save_path="."):
     """Download CloudLab certificate using Selenium"""
@@ -157,15 +186,24 @@ def encrypt_credentials(username, password):
     return True
 
 def main():
-    # Get credentials once
-    username, password = get_credentials()
+    # Try until successful
+    force_prompt = False
+    success = False
     
-    # Check if certificate exists, download if not
-    if not os.path.exists("cloudlab.pem"):
-        print("Certificate not found, downloading...")
-        if not download_certificate(username, password):
-            print("Failed to download certificate")
-            return 1
+    while not success:
+        # Get credentials (force prompt if previous attempt failed)
+        username, password = get_credentials(force_prompt)
+        
+        # Check if certificate exists, download if not
+        if not os.path.exists("cloudlab.pem"):
+            print("Certificate not found, downloading...")
+            if download_certificate(username, password):
+                success = True
+            else:
+                print("Failed to download certificate. Incorrect credentials? Try again.")
+                force_prompt = True  # Force prompt on next iteration
+        else:
+            success = True  # Certificate already exists
     
     # Decrypt certificate
     if not decrypt_certificate(password):

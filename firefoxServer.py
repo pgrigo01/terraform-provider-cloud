@@ -15,8 +15,8 @@ import CloudLabAPI.src.emulab_sslxmlrpc.xmlrpc as xmlrpc
 from cryptography.fernet import Fernet
 
 # Local modules used for experiment management and extension
-import firefoxExperimentCollector
-from algorithmExpExtension import extendAllExperimentsToLast
+from cloudlab_utils import firefoxExperimentCollector
+from cloudlab_utils.algorithmExpExtension import extendAllExperimentsToLast
 
 # --------------------------
 # Flask App and Logger Setup
