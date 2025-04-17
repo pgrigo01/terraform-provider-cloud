@@ -73,12 +73,35 @@ install_path="$HOME/.terraform.d/plugins/registry.terraform.io/pgrigo01/cloudlab
 echo "📁 Creating directory: ${install_path}..."
 mkdir -p "${install_path}"
 
-# 8. Move the built binary to the plugin path
+# …existing code…
+
+# 8. Move the built binary to linux_amd64 plugin path
 echo "📦 Moving provider binary to ${install_path}/..."
 mv terraform-provider-cloudlab_${version} "${install_path}/"
+
+# 8.1 Cross‑build for other platforms to populate the fs‑mirror
+platforms=(darwin_amd64 darwin_arm64 windows_amd64 windows_arm64 linux_arm64)
+for p in "${platforms[@]}"; do
+  os=${p%_*}; arch=${p#*_}
+  mirror_dir="$HOME/.terraform.d/plugins/registry.terraform.io/pgrigo01/cloudlab/${version_folder}/${os}_${arch}"
+  echo "🔧 Building provider for ${os}/${arch}..."
+  mkdir -p "${mirror_dir}"
+  GOOS=$os GOARCH=$arch go build -o "${mirror_dir}/terraform-provider-cloudlab_${version}"
+done
 
 # 9. Run Terraform init with upgrade
 echo "🚀 Running 'terraform init -upgrade'..."
 terraform init -upgrade
+
+# 10. Update lockfile with additional platform checksums…
+echo "🔐 Running 'terraform providers lock' for multiple platforms…'"
+terraform providers lock \
+  -platform=linux_amd64 \
+  -platform=darwin_amd64 \
+  -platform=darwin_arm64 \
+  -platform=windows_amd64 \
+  -platform=windows_arm64 \
+  -platform=linux_arm64 \
+  -fs-mirror="$HOME/.terraform.d/plugins"
 
 echo "🎉 Done. Provider version ${version} is now built, installed locally, and main.tf updated."
