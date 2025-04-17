@@ -10,8 +10,9 @@ echo "#Run on your terminal
 # 
 # Run the following command to set up the environment
 source myenv/bin/activate  
+terraform init
 
-# Run the following command to start the server
-python3 selectServer.py
+Modify main.tf and then run the following command to apply the changes
+terraform apply
 
 "
