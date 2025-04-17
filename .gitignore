@@ -43,3 +43,5 @@ credentials.encrypted
 cloudlab-decrypted.pem.bak
 
 encryption_key.key
+
+.terraform.lock.hcl
