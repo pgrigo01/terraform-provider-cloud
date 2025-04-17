@@ -1,7 +1,6 @@
 ./scripts/install_go.sh 
 ./scripts/setupChrome.sh 
 ./scripts/setupEnvironment.sh 
-#./scripts/decryptCredentials.sh 
 source myenv/bin/activate
 python3 getChromeCredentials.py
 

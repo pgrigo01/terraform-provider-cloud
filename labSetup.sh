@@ -1,8 +1,7 @@
 ./scripts/labEnvSetup.sh 
-# ./scripts/decryptCredentials.sh 
+
 source myenv/bin/activate 
 python3 getFirefoxCredentials.py
-
 # ./scripts/build_provider.sh 
 echo "#Run on your terminal
 # 
