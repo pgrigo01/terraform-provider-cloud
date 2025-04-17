@@ -1,11 +1,11 @@
 ./install_go.sh 
 ./setupChrome.sh 
 ./setupEnvironment.sh 
-#./decryptCredentials.sh 
+./decryptCredentials.sh 
 source myenv/bin/activate
 python3 getChromeCredentials.py
 
-./build_provider.sh 
+#./build_provider.sh 
 echo "#Run on your terminal
 # 
 # Run the following command to set up the environment
