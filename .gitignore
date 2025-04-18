@@ -46,4 +46,3 @@ encryption_key.key
 
 .terraform.lock.hcl
 
-.terraform/
