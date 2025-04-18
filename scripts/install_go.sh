@@ -41,6 +41,7 @@ sudo tar -C /usr/local -xzf "${GO_TARBALL}"
 echo "Cleaning up downloaded file..."
 rm "${GO_TARBALL}"
 
+
 # Update PATH in the user's profile if not already set
 PROFILE_FILE="$HOME/.profile"
 if ! grep -q "/usr/local/go/bin" "$PROFILE_FILE"; then
@@ -48,11 +49,17 @@ if ! grep -q "/usr/local/go/bin" "$PROFILE_FILE"; then
     echo "export PATH=\$PATH:/usr/local/go/bin" >> "$PROFILE_FILE"
 fi
 
-# Reload the profile file to update PATH in the current session.
-# (This may not affect the current shell; you might need to log out and log back in.)
+# Source the profile within the script
 source "$PROFILE_FILE"
 
+# Make Go available in the current script execution
+export PATH=$PATH:/usr/local/go/bin
+
 echo "Go version ${GO_VERSION} has been installed successfully."
+echo "To make Go available in your current terminal session, please run:"
+echo "    source ~/.profile"
+echo "Or open a new terminal window."
+echo ""
 echo "Verify the installation by running: go version"
 
 #Terraform 
