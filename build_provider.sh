@@ -97,11 +97,11 @@ terraform init -upgrade
 echo "🔐 Running 'terraform providers lock' for multiple platforms…'"
 terraform providers lock \
   -platform=linux_amd64 \
-  -platform=darwin_amd64 \
-  -platform=darwin_arm64 \
-  -platform=windows_amd64 \
-  -platform=windows_arm64 \
-  -platform=linux_arm64 \
+#  -platform=darwin_amd64 \
+#  -platform=darwin_arm64 \
+#  -platform=windows_amd64 \
+#  -platform=windows_arm64 \
+#  -platform=linux_arm64 \
   -fs-mirror="$HOME/.terraform.d/plugins"
 
 echo "🎉 Done. Provider version ${version} is now built, installed locally, and main.tf updated."
