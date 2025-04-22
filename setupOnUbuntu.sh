@@ -3,7 +3,7 @@
 ./scripts/setupEnvironment.sh
 source myenv/bin/activate
 python3 getChromeCredentials.py
-
+source ~/.profile
 #./scripts/build_provider.sh 
 echo "#Run on your terminal
 # 
