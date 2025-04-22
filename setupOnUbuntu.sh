@@ -9,8 +9,8 @@
 # ./scripts/install_go.sh 
 . ./scripts/install_go.sh
 ./scripts/setupEnvironment.sh
+. ./scripts/getChrome.sh
 source myenv/bin/activate
-./scripts/getChrome.sh
 python3 getChromeCredentials.py
 
 # re‑load your ~/.profile into this same shell
