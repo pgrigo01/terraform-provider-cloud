@@ -6,7 +6,7 @@
 }
 
 # now everything runs in your current shell…
-./scripts/install_go.sh 
+# ./scripts/install_go.sh 
 . ./scripts/install_go.sh
 ./scripts/setupEnvironment.sh
 source myenv/bin/activate
