@@ -3,8 +3,8 @@
 terraform {
   required_providers {
     cloudlab = {
-      source  = "pgrigo01/cloudlab"
-      version = "0.2.4" 
+      source  = "pgrigo01/cloud"
+      version = "1.0.0" 
     }
   }
 }
@@ -53,9 +53,9 @@ provider "cloudlab" {
 #     aggregate    = "utah.cloudlab.us"
 # }
 
-# resource "cloudlab_simple_experiment" "experiment6"{
-#     name = "utahexp3"
-#     routable_ip = true
-#     image        = "UBUNTU 24.04"
-#     aggregate   = "utah.cloudlab.us"
-# }
+resource "cloudlab_simple_experiment" "experiment6"{
+    name = "utahtest"
+    routable_ip = true
+    image        = "UBUNTU 24.04"
+    aggregate   = "utah.cloudlab.us"
+}
