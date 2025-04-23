@@ -46,4 +46,5 @@ encryption_key.key
 
 .terraform.lock.hcl
 
-.terraform/
+terraform-public-gpg.asc
+
